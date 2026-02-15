@@ -51,18 +51,21 @@ app.prepare().then(() => {
       socket.emit('waiting', { position });
       console.log(`User ${socket.id} added to queue. Total waiting: ${waitingUsers.length}`);
       
-      // Try to match immediately after adding
-      if (waitingUsers.length >= 2) {
-        attemptMatch();
-      } else if (waitingUsers.length === 1) {
-        // For single user, create bot immediately after a short delay
+      // Try to match IMMEDIATELY - multiple attempts for reliability
+      attemptMatch();
+      // Try again after small delay in case of race conditions
+      setTimeout(attemptMatch, 100);
+      setTimeout(attemptMatch, 500);
+      
+      // Bot fallback - only if still alone after 7 seconds
+      if (waitingUsers.length === 1) {
         setTimeout(() => {
           // Check if still alone in queue
           if (waitingUsers.length === 1 && waitingUsers[0].id === socket.id) {
             console.log(`[Bot] Creating bot for single user ${socket.id}`);
             createBotSession(socket.id);
           }
-        }, 5000); // 5 second delay
+        }, 7000); // 7 second delay - give real users time to match
       }
     });
 
@@ -250,16 +253,9 @@ app.prepare().then(() => {
     if (waitingUsers.length >= 2) {
       console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match`);
       attemptMatch();
-    }
-    
-    // Auto-create bot if someone is alone for testing
-    if (waitingUsers.length === 1) {
-      const realUser = waitingUsers[0];
-      // Only create bot if real user has been waiting for 5+ seconds
-      if (Date.now() - realUser.joinedAt > 5000) {
-        console.log(`[Bot] Creating bot session - user waiting ${Date.now() - realUser.joinedAt}ms`);
-        createBotSession(realUser.id);
-      }
+      // Try multiple times for reliability
+      setTimeout(attemptMatch, 100);
+      setTimeout(attemptMatch, 500);
     }
   }, 1000); // Check every 1 second
 

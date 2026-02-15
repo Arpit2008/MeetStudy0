@@ -430,9 +430,9 @@ export default function StudyBuddyConnect() {
       socketRef.current = io(serverUrl, {
         autoConnect: true,
         reconnection: true,
-        reconnectionAttempts: 10,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
+        reconnectionAttempts: 20, // More retry attempts
+        reconnectionDelay: 500,   // Faster retry
+        reconnectionDelayMax: 3000,
         timeout: 5000,
         transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
       });
