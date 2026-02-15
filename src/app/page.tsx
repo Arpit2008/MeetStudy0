@@ -19,8 +19,7 @@ interface SessionData {
   isBotSession?: boolean;
 }
 
-// Ice servers for WebRTC - Using reliable free STUN servers
-// Twilio + Google STUN (most reliable combination)
+// Ice servers for WebRTC - Using reliable free STUN + TURN servers
 const iceServers = [
   // Google STUN servers (most reliable)
   { urls: "stun:stun.l.google.com:19302" },
@@ -29,7 +28,13 @@ const iceServers = [
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
   // Twilio free STUN
-  { urls: "stun:global.stun.twilio.com:3478" }
+  { urls: "stun:global.stun.twilio.com:3478" },
+  // OpenRelay TURN (free, no registration needed)
+  { 
+    urls: "turn:openrelay.metered.ca:80", 
+    username: "openrelayproject", 
+    credential: "openrelayproject" 
+  }
 ];
 
 export default function StudyBuddyConnect() {
@@ -149,7 +154,7 @@ export default function StudyBuddyConnect() {
         localVideoRef.current.srcObject = stream;
       }
 
-      // ICE server configuration - using reliable free STUN servers
+      // ICE server configuration - using reliable free STUN + TURN servers
       const pcConfig = {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -157,7 +162,13 @@ export default function StudyBuddyConnect() {
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-          { urls: "stun:global.stun.twilio.com:3478" }
+          { urls: "stun:global.stun.twilio.com:3478" },
+          // OpenRelay TURN (free, no registration needed)
+          { 
+            urls: "turn:openrelay.metered.ca:80", 
+            username: "openrelayproject", 
+            credential: "openrelayproject" 
+          }
         ],
         iceCandidatePoolSize: 10
       };
@@ -280,7 +291,13 @@ export default function StudyBuddyConnect() {
             { urls: "stun:stun2.l.google.com:19302" },
             { urls: "stun:stun3.l.google.com:19302" },
             { urls: "stun:stun4.l.google.com:19302" },
-            { urls: "stun:global.stun.twilio.com:3478" }
+            { urls: "stun:global.stun.twilio.com:3478" },
+            // OpenRelay TURN (free, no registration needed)
+            { 
+              urls: "turn:openrelay.metered.ca:80", 
+              username: "openrelayproject", 
+              credential: "openrelayproject" 
+            }
           ],
           iceCandidatePoolSize: 10
         };
@@ -550,6 +567,12 @@ export default function StudyBuddyConnect() {
       }
       
       // Use socket.id for reliable identification
+      if (!socket.id) {
+        console.log("Socket ID not available yet, waiting...");
+        setTimeout(emitJoinQueue, 200);
+        return;
+      }
+      
       const userData: UserData = {
         id: socket.id,
       };
