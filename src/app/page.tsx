@@ -388,14 +388,47 @@ export default function StudyBuddyConnect() {
   // Initialize Socket.io
   const initSocket = useCallback(() => {
     if (!socketRef.current) {
-      socketRef.current = io({
+      // Get the current server URL
+      const serverUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      console.log("Connecting to socket server:", serverUrl);
+      
+      socketRef.current = io(serverUrl, {
         autoConnect: true,
         reconnection: true,
-        timeout: 10000,
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
+        timeout: 20000,
+        transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
       });
 
       socketRef.current.on("connect", () => {
         console.log("Connected to server:", socketRef.current?.id);
+      });
+
+      socketRef.current.on("connect_error", (error) => {
+        console.error("Socket connection error:", error.message);
+      });
+
+      socketRef.current.on("disconnect", (reason) => {
+        console.log("Disconnected from server:", reason);
+      });
+
+      socketRef.current.io.on("reconnect", (attempt) => {
+        console.log("Reconnected after", attempt, "attempts");
+      });
+
+      socketRef.current.io.on("reconnect_attempt", (attempt) => {
+        console.log("Reconnection attempt:", attempt);
+      });
+
+      socketRef.current.io.on("reconnect_error", (error) => {
+        console.error("Reconnection error:", error);
+      });
+
+      socketRef.current.io.on("reconnect_failed", () => {
+        console.error("Reconnection failed - server may be unreachable");
+        alert("Could not connect to server. Please check your internet connection and try again.");
       });
 
       socketRef.current.on("waiting", (data: { position: number }) => {
@@ -428,14 +461,6 @@ export default function StudyBuddyConnect() {
       socketRef.current.on("session-ended", (data: { reason: string }) => {
         console.log("Session ended:", data.reason);
         endSession();
-      });
-
-      socketRef.current.on("disconnect", () => {
-        console.log("Disconnected from server");
-      });
-      
-      socketRef.current.on("connect_error", (error) => {
-        console.error("Socket connection error:", error);
       });
     }
     return socketRef.current;
