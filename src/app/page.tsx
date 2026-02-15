@@ -6,11 +6,6 @@ import { io, Socket } from "socket.io-client";
 // Types
 interface UserData {
   id: string;
-  topic: string;
-  duration: number;
-  gender: string;
-  genderPreference: string;
-  studyMode: "video" | "text";
 }
 
 interface PartnerData extends UserData {
@@ -57,15 +52,7 @@ export default function StudyBuddyConnect() {
     }
     return false;
   });
-  const [soundEnabled, setSoundEnabled] = useState(false);
   const [currentView, setCurrentView] = useState<"landing" | "searching" | "session">("landing");
-  
-  // User preferences
-  const [duration, setDuration] = useState<string>("30");
-  const [customDuration, setCustomDuration] = useState("");
-  const [genderPreference, setGenderPreference] = useState("Any");
-  const [topic, setTopic] = useState("");
-  const [studyMode, setStudyMode] = useState<"video" | "text">("video");
   
   // Session states
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
@@ -93,13 +80,10 @@ export default function StudyBuddyConnect() {
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
 
-  // Get actual duration
+  // Get actual duration - default 30 minutes
   const getActualDuration = useCallback(() => {
-    if (duration === "custom" && customDuration) {
-      return parseInt(customDuration);
-    }
-    return duration === "custom" ? 30 : parseInt(duration);
-  }, [duration, customDuration]);
+    return 30; // Default 30 minutes
+  }, []);
 
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -114,11 +98,6 @@ export default function StudyBuddyConnect() {
       }
       return newValue;
     });
-  }, []);
-
-  // Toggle sound
-  const toggleSound = useCallback(() => {
-    setSoundEnabled((prev) => !prev);
   }, []);
 
   // End session function
@@ -163,9 +142,9 @@ export default function StudyBuddyConnect() {
   // WebRTC Functions
   const startWebRTC = useCallback(async (data: SessionData) => {
     try {
-      // Get local media stream
+      // Get local media stream - always video now
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: studyMode === "video",
+        video: true,
         audio: true,
       });
       
@@ -204,24 +183,22 @@ export default function StudyBuddyConnect() {
         }
       };
 
-      // Create data channel for chat (if text mode)
-      if (studyMode === "text") {
-        const channel = pc.createDataChannel("chat");
-        dataChannelRef.current = channel;
-        
-        channel.onmessage = (event) => {
-          const message = JSON.parse(event.data);
+      // Create data channel for chat (always available for text communication)
+      const channel = pc.createDataChannel("chat");
+      dataChannelRef.current = channel;
+      
+      channel.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        setChatMessages((prev) => [...prev, message]);
+      };
+      
+      pc.ondatachannel = (event) => {
+        dataChannelRef.current = event.channel;
+        event.channel.onmessage = (e) => {
+          const message = JSON.parse(e.data);
           setChatMessages((prev) => [...prev, message]);
         };
-        
-        pc.ondatachannel = (event) => {
-          dataChannelRef.current = event.channel;
-          event.channel.onmessage = (e) => {
-            const message = JSON.parse(e.data);
-            setChatMessages((prev) => [...prev, message]);
-          };
-        };
-      }
+      };
 
       // If initiator, create offer
       if (data.isInitiator) {
@@ -239,7 +216,7 @@ export default function StudyBuddyConnect() {
       alert("Could not access camera/microphone. Please check permissions.");
       endSessionRef.current();
     }
-  }, [studyMode, sessionData]);
+  }, [sessionData]);
 
   const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
     try {
@@ -266,9 +243,9 @@ export default function StudyBuddyConnect() {
           }
         };
 
-        // Get local stream
+        // Get local stream - always video now
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: studyMode === "video",
+          video: true,
           audio: true,
         });
         localStreamRef.current = stream;
@@ -282,16 +259,14 @@ export default function StudyBuddyConnect() {
           pc.addTrack(track, stream);
         });
 
-        // Create data channel for chat
-        if (studyMode === "text") {
-          pc.ondatachannel = (event) => {
-            dataChannelRef.current = event.channel;
-            event.channel.onmessage = (e) => {
-              const message = JSON.parse(e.data);
-              setChatMessages((prev) => [...prev, message]);
-            };
+        // Always create data channel for chat
+        pc.ondatachannel = (event) => {
+          dataChannelRef.current = event.channel;
+          event.channel.onmessage = (e) => {
+            const message = JSON.parse(e.data);
+            setChatMessages((prev) => [...prev, message]);
           };
-        }
+        };
       }
 
       await peerConnectionRef.current.setRemoteDescription(data.offer);
@@ -306,7 +281,7 @@ export default function StudyBuddyConnect() {
     } catch (error) {
       console.error("Error handling offer:", error);
     }
-  }, [studyMode, sessionData]);
+  }, [sessionData]);
 
   const handleWebRTCAnswer = useCallback(async (data: { answer: RTCSessionDescriptionInit; from: string }) => {
     try {
@@ -392,12 +367,10 @@ export default function StudyBuddyConnect() {
         console.log("Match found!", data);
         setSessionData(data);
         setCurrentView("session");
-        setTimeRemaining(getActualDuration() * 60);
+        setTimeRemaining(30 * 60); // Default 30 minutes
         
-        // Start WebRTC connection
-        if (studyMode === "video") {
-          startWebRTC(data);
-        }
+        // Start WebRTC connection - always video
+        startWebRTC(data);
       });
 
       socketRef.current.on("webrtc-offer", async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
@@ -426,15 +399,10 @@ export default function StudyBuddyConnect() {
       });
     }
     return socketRef.current;
-  }, [studyMode, getActualDuration, startWebRTC, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, endSession]);
+  }, [startWebRTC, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, endSession]);
 
-  // Find partner
+  // Find partner - simplified
   const findPartner = useCallback(() => {
-    if (!topic.trim()) {
-      alert("Please enter a subject or topic");
-      return;
-    }
-
     const socket = initSocket();
     setCurrentView("searching");
 
@@ -442,27 +410,20 @@ export default function StudyBuddyConnect() {
     const emitJoinQueue = () => {
       if (!socket.connected) {
         console.log("Socket not connected, waiting...");
-        // Wait a bit more - keep trying
         setTimeout(emitJoinQueue, 200);
         return;
       }
       
       const userData: UserData = {
         id: socket.id || `user-${Date.now()}`,
-        topic: topic.trim(),
-        duration: getActualDuration(),
-        gender: "Any",
-        genderPreference,
-        studyMode,
       };
 
-      console.log("Socket connected, joining queue with:", userData);
+      console.log("Socket connected, joining queue...");
       socket.emit("join-queue", userData);
     };
     
-    // Start trying to join queue
     emitJoinQueue();
-  }, [topic, genderPreference, studyMode, initSocket, getActualDuration]);
+  }, [initSocket]);
 
   // Cancel search
   const cancelSearch = useCallback(() => {
@@ -546,21 +507,6 @@ export default function StudyBuddyConnect() {
         )}
       </button>
 
-      {/* Sound Toggle */}
-      <button
-        onClick={toggleSound}
-        className={`sound-toggle control-btn ${soundEnabled ? "active" : ""}`}
-        title={soundEnabled ? "Mute Sounds" : "Enable Sounds"}
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          {soundEnabled ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-          )}
-        </svg>
-      </button>
-
       {/* Main Content */}
       <main className="relative min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
         
@@ -577,163 +523,30 @@ export default function StudyBuddyConnect() {
               </p>
             </div>
 
-            {/* Input Panel - Glassmorphism */}
-            <div className="glass rounded-3xl p-6 sm:p-8">
-              <h2 className="text-xl font-semibold text-white mb-6 text-center">
-                Set Your Preferences
-              </h2>
-
-              {/* Study Duration */}
-              <div className="mb-6">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
-                  <svg className="w-4 h-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  Study Duration
-                </label>
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  {["30", "45", "60", "90", "120", "180"].map((d) => (
-                    <button
-                      key={d}
-                      onClick={() => { setDuration(d); setCustomDuration(""); }}
-                      className={`duration-btn ${duration === d && !customDuration ? "selected" : ""}`}
-                    >
-                      {parseInt(d) >= 60 ? `${parseInt(d)/60}h` : `${d}m`}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setDuration("custom")}
-                    className={`text-xs px-3 py-1.5 rounded-lg transition-all ${
-                      duration === "custom" 
-                        ? "bg-sky-500 text-white" 
-                        : "bg-white/10 text-white/60 hover:bg-white/20"
-                    }`}
-                  >
-                    Custom
-                  </button>
-                  {duration === "custom" && (
-                    <input
-                      type="number"
-                      placeholder="minutes"
-                      value={customDuration}
-                      onChange={(e) => setCustomDuration(e.target.value)}
-                      className="input-field flex-1 text-sm py-2"
-                      min={1}
-                      max={300}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Topic/Subject */}
-              <div className="mb-6">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
-                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                  </svg>
-                  Subject or Topic
-                </label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="What do you want to study?"
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    className="input-field pl-10"
-                  />
-                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                    </svg>
-                  </div>
-                </div>
-                {/* Quick topic suggestions */}
-                <div className="flex flex-wrap gap-2 mt-3">
-                  {["Math", "Programming", "Physics", "Chemistry", "Languages", "History"].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTopic(t)}
-                      className={`text-xs px-3 py-1 rounded-full transition-all ${
-                        topic.toLowerCase() === t.toLowerCase()
-                          ? "bg-purple-500 text-white"
-                          : "bg-white/10 text-white/60 hover:bg-white/20"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Study Mode */}
-              <div className="mb-6">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
-                  <svg className="w-4 h-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Study Mode
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setStudyMode("video")}
-                    className={`mode-btn ${studyMode === "video" ? "selected" : ""}`}
-                  >
-                    <div className="text-2xl mb-1">📹</div>
-                    <div className="font-medium">Video Call</div>
-                    <div className="text-xs opacity-70">Face to face</div>
-                  </button>
-                  <button
-                    onClick={() => setStudyMode("text")}
-                    className={`mode-btn ${studyMode === "text" ? "selected" : ""}`}
-                  >
-                    <div className="text-2xl mb-1">💬</div>
-                    <div className="font-medium">Text Chat</div>
-                    <div className="text-xs opacity-70">Type messages</div>
-                  </button>
-                </div>
-              </div>
-
-              {/* Gender Preference */}
-              <div className="mb-8">
-                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
-                  <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Partner Preference
-                </label>
-                <div className="flex gap-2">
-                  {["Any", "Male", "Female"].map((option) => (
-                    <button
-                      key={option}
-                      onClick={() => setGenderPreference(option)}
-                      className={`gender-btn flex-1 ${genderPreference === option ? "selected" : ""}`}
-                    >
-                      {option === "Any" ? "👥 Anyone" : option === "Male" ? "👨 Male" : "👩 Female"}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+            {/* Simple Find Partner Panel */}
+            <div className="glass rounded-3xl p-8 text-center">
+              <div className="text-6xl mb-4">🎓</div>
+              <p className="text-white/80 mb-6">
+                Connect instantly with a random study partner for a 30-minute video session
+              </p>
+              
               {/* Find Partner Button */}
               <button
                 onClick={findPartner}
-                className="w-full gradient-btn py-4 rounded-xl text-white font-semibold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                className="w-full gradient-btn py-5 rounded-xl text-white font-bold text-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
               >
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                <span className="flex items-center justify-center gap-3">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                   </svg>
-                  Find Study Partner
+                  Find a Study Partner
                 </span>
               </button>
+              
+              <p className="text-white/50 text-sm mt-4">
+                🔒 No login required • 100% private
+              </p>
             </div>
-
-            {/* Privacy Message */}
-            <p className={`text-center mt-6 text-sm ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-              🔒 No login. No history saved. 100% private sessions.
-            </p>
           </div>
         )}
 
@@ -770,9 +583,8 @@ export default function StudyBuddyConnect() {
                 Position in queue: <span className="text-sky-400 font-bold">{searchPosition}</span>
               </p>
               <p className={`text-sm mb-8 ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-                Looking for: <span className="text-white">{topic || "Any topic"}</span> •{" "}
-                <span className="text-white">{getActualDuration()} min</span> •{" "}
-                <span className="text-white">{studyMode === "video" ? "📹 Video" : "💬 Text"}</span>
+                Looking for a study partner... •
+                <span className="text-white">30 min video session</span>
               </p>
 
               <button
@@ -823,9 +635,9 @@ export default function StudyBuddyConnect() {
                   autoPlay
                   playsInline
                   muted
-                  className={`mirror w-full h-full ${studyMode === "text" ? "hidden" : ""}`}
+                  className="mirror w-full h-full"
                 />
-                {studyMode === "text" || !hasLocalStream ? (
+                {!hasLocalStream ? (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div className="text-center">
                       <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-sky-500/20 flex items-center justify-center">
@@ -853,58 +665,8 @@ export default function StudyBuddyConnect() {
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
-                  className={`w-full h-full ${studyMode === "text" ? "hidden" : ""}`}
+                  className="w-full h-full"
                 />
-                {studyMode === "text" ? (
-                  <div className="absolute inset-0 flex flex-col">
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3" ref={chatMessagesRef}>
-                      {chatMessages.map((msg, idx) => (
-                        <div
-                          key={idx}
-                          className={`flex ${msg.sender === "You" ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                              msg.sender === "You"
-                                ? "bg-sky-500 text-white"
-                                : "bg-white/10 text-white"
-                            }`}
-                          >
-                            <p className="text-sm">{msg.text}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="p-4 border-t border-white/10">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && sendChatMessage()}
-                          placeholder="Type a message..."
-                          className="flex-1 input-field"
-                        />
-                        <button
-                          onClick={sendChatMessage}
-                          className="px-4 py-2 bg-sky-500 rounded-xl text-white hover:bg-sky-600 transition-all"
-                        >
-                          Send
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-                {!isPeerConnected && studyMode === "video" && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-purple-500/20 flex items-center justify-center animate-pulse">
-                        <span className="text-3xl">🔗</span>
-                      </div>
-                      <p className="text-white/70">Connecting to partner...</p>
-                    </div>
-                  </div>
-                )}
                 <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-1">
                   <span className="text-white text-sm">Partner</span>
                 </div>
@@ -913,23 +675,21 @@ export default function StudyBuddyConnect() {
 
             {/* Controls */}
             <div className="flex justify-center gap-4">
-              {studyMode === "video" && (
-                <button
-                  onClick={toggleCamera}
-                  className={`control-btn ${isCameraMuted ? "muted" : ""}`}
-                  title={isCameraMuted ? "Turn on camera" : "Turn off camera"}
-                >
-                  {isCameraMuted ? (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                </button>
-              )}
+              <button
+                onClick={toggleCamera}
+                className={`control-btn ${isCameraMuted ? "muted" : ""}`}
+                title={isCameraMuted ? "Turn on camera" : "Turn off camera"}
+              >
+                {isCameraMuted ? (
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                ) : (
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </button>
               <button
                 onClick={toggleMic}
                 className={`control-btn ${isMicMuted ? "muted" : ""}`}
