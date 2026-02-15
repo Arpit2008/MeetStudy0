@@ -19,18 +19,17 @@ interface SessionData {
   isBotSession?: boolean;
 }
 
-// Ice servers for WebRTC - Using reliable free TURN servers
-// OpenRelay (free, no auth needed) + Google STUN
+// Ice servers for WebRTC - Using reliable free STUN servers
+// Twilio + Google STUN (most reliable combination)
 const iceServers = [
-  // Google STUN servers
+  // Google STUN servers (most reliable)
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
-  // OpenRelay TURN servers (free, no authentication required)
-  { urls: "turn:openrelay.metered.ca:443" },
-  { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
+  // Twilio free STUN
+  { urls: "stun:global.stun.twilio.com:3478" }
 ];
 
 export default function StudyBuddyConnect() {
@@ -57,6 +56,8 @@ export default function StudyBuddyConnect() {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [hasLocalStream, setHasLocalStream] = useState(false);
   const [isPeerConnected, setIsPeerConnected] = useState(false);
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Refs
   const socketRef = useRef<Socket | null>(null);
@@ -148,7 +149,7 @@ export default function StudyBuddyConnect() {
         localVideoRef.current.srcObject = stream;
       }
 
-      // ICE server configuration - using reliable free TURN servers
+      // ICE server configuration - using reliable free STUN servers
       const pcConfig = {
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -156,8 +157,7 @@ export default function StudyBuddyConnect() {
           { urls: "stun:stun2.l.google.com:19302" },
           { urls: "stun:stun3.l.google.com:19302" },
           { urls: "stun:stun4.l.google.com:19302" },
-          { urls: "turn:openrelay.metered.ca:443" },
-          { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
+          { urls: "stun:global.stun.twilio.com:3478" }
         ],
         iceCandidatePoolSize: 10
       };
@@ -182,12 +182,23 @@ export default function StudyBuddyConnect() {
       // Handle ICE connection state changes for debugging
       pc.oniceconnectionstatechange = () => {
         console.log("ICE Connection State:", pc.iceConnectionState);
+        
+        // Clear timeout on any state change
+        if (connectionTimeoutRef.current) {
+          clearTimeout(connectionTimeoutRef.current);
+        }
+        
         if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
           setIsPeerConnected(true);
+          setConnectionError(null);
+          console.log("✅ Peer connected!");
         }
-        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
-          console.log("ICE Connection failed or disconnected, attempting to reconnect...");
-          // Try to restart ICE
+        if (pc.iceConnectionState === "failed") {
+          console.log("❌ ICE Connection failed, attempting restart...");
+          pc.restartIce();
+        }
+        if (pc.iceConnectionState === "disconnected") {
+          console.log("⚠️ ICE Connection disconnected, attempting restart...");
           pc.restartIce();
         }
       };
@@ -250,8 +261,7 @@ export default function StudyBuddyConnect() {
             { urls: "stun:stun2.l.google.com:19302" },
             { urls: "stun:stun3.l.google.com:19302" },
             { urls: "stun:stun4.l.google.com:19302" },
-            { urls: "turn:openrelay.metered.ca:443" },
-            { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
+            { urls: "stun:global.stun.twilio.com:3478" }
           ],
           iceCandidatePoolSize: 10
         };
@@ -278,9 +288,13 @@ export default function StudyBuddyConnect() {
 
         // Handle ICE connection state changes
         pc.oniceconnectionstatechange = () => {
-          console.log("ICE Connection State:", pc.iceConnectionState);
+          console.log("ICE Connection State (receiver):", pc.iceConnectionState);
           if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
             setIsPeerConnected(true);
+          }
+          if (pc.iceConnectionState === "failed") {
+            console.log("❌ ICE failed on receiver, restarting...");
+            pc.restartIce();
           }
         };
 
