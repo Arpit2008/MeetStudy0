@@ -18,26 +18,18 @@ interface SessionData {
   isInitiator: boolean;
 }
 
-// Ice servers for WebRTC (STUN + TURN for better connectivity across devices)
+// Ice servers for WebRTC - Using reliable free TURN servers
+// OpenRelay (free, no auth needed) + Google STUN
 const iceServers = [
+  // Google STUN servers
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
-  { 
-    urls: "turn:global.turn.metered.ca:80",
-    username: "metered",
-    credential: "metered"
-  },
-  { 
-    urls: "turn:global.turn.metered.ca:443",
-    username: "metered",
-    credential: "metered"
-  },
-  {
-    urls: "turn:global.turn.metered.ca:443?transport=tcp",
-    username: "metered",
-    credential: "metered"
-  }
+  { urls: "stun:stun3.l.google.com:19302" },
+  { urls: "stun:stun4.l.google.com:19302" },
+  // OpenRelay TURN servers (free, no authentication required)
+  { urls: "turn:openrelay.metered.ca:443" },
+  { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
 ];
 
 export default function StudyBuddyConnect() {
@@ -155,8 +147,22 @@ export default function StudyBuddyConnect() {
         localVideoRef.current.srcObject = stream;
       }
 
+      // ICE server configuration - using reliable free TURN servers
+      const pcConfig = {
+        iceServers: [
+          { urls: "stun:stun.l.google.com:19302" },
+          { urls: "stun:stun1.l.google.com:19302" },
+          { urls: "stun:stun2.l.google.com:19302" },
+          { urls: "stun:stun3.l.google.com:19302" },
+          { urls: "stun:stun4.l.google.com:19302" },
+          { urls: "turn:openrelay.metered.ca:443" },
+          { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
+        ],
+        iceCandidatePoolSize: 10
+      };
+      
       // Create peer connection
-      const pc = new RTCPeerConnection({ iceServers });
+      const pc = new RTCPeerConnection(pcConfig);
       peerConnectionRef.current = pc;
 
       // Add local tracks
@@ -172,9 +178,23 @@ export default function StudyBuddyConnect() {
         }
       };
 
+      // Handle ICE connection state changes for debugging
+      pc.oniceconnectionstatechange = () => {
+        console.log("ICE Connection State:", pc.iceConnectionState);
+        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+          setIsPeerConnected(true);
+        }
+        if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "disconnected") {
+          console.log("ICE Connection failed or disconnected, attempting to reconnect...");
+          // Try to restart ICE
+          pc.restartIce();
+        }
+      };
+
       // Handle ICE candidates
       pc.onicecandidate = (event) => {
         if (event.candidate && socketRef.current && sessionData) {
+          // Send ICE candidate to peer through signaling server
           socketRef.current.emit("ice-candidate", {
             sessionId: sessionData.sessionId,
             candidate: event.candidate,
@@ -221,8 +241,20 @@ export default function StudyBuddyConnect() {
   const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
     try {
       if (!peerConnectionRef.current) {
-        // Create peer connection if not exists
-        const pc = new RTCPeerConnection({ iceServers });
+        // Create peer connection if not exists - use same config
+        const pcConfig = {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+            { urls: "stun:stun2.l.google.com:19302" },
+            { urls: "stun:stun3.l.google.com:19302" },
+            { urls: "stun:stun4.l.google.com:19302" },
+            { urls: "turn:openrelay.metered.ca:443" },
+            { urls: "turn:openrelay.metered.ca:443?transport=tcp" }
+          ],
+          iceCandidatePoolSize: 10
+        };
+        const pc = new RTCPeerConnection(pcConfig);
         peerConnectionRef.current = pc;
 
         // Handle incoming tracks
@@ -240,6 +272,14 @@ export default function StudyBuddyConnect() {
               candidate: event.candidate,
               targetId: sessionData?.partner.id,
             });
+          }
+        };
+
+        // Handle ICE connection state changes
+        pc.oniceconnectionstatechange = () => {
+          console.log("ICE Connection State:", pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            setIsPeerConnected(true);
           }
         };
 
