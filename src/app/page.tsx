@@ -547,93 +547,150 @@ export default function StudyBuddyConnect() {
                 Set Your Preferences
               </h2>
 
-              {/* Duration */}
-              <div className="mb-5">
-                <label className="block text-sm font-medium text-white/80 mb-2">
+              {/* Study Duration */}
+              <div className="mb-6">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
+                  <svg className="w-4 h-4 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
                   Study Duration
                 </label>
-                <select
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="select-field"
-                >
-                  <option value="30">30 minutes</option>
-                  <option value="60">60 minutes</option>
-                  <option value="90">90 minutes</option>
-                  <option value="custom">Custom</option>
-                </select>
-                {duration === "custom" && (
-                  <input
-                    type="number"
-                    placeholder="Enter minutes"
-                    value={customDuration}
-                    onChange={(e) => setCustomDuration(e.target.value)}
-                    className="input-field mt-2"
-                    min={1}
-                    max={180}
-                  />
-                )}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  {["30", "45", "60", "90", "120", "180"].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => { setDuration(d); setCustomDuration(""); }}
+                      className={`duration-btn ${duration === d && !customDuration ? "selected" : ""}`}
+                    >
+                      {parseInt(d) >= 60 ? `${parseInt(d)/60}h` : `${d}m`}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setDuration("custom")}
+                    className={`text-xs px-3 py-1.5 rounded-lg transition-all ${
+                      duration === "custom" 
+                        ? "bg-sky-500 text-white" 
+                        : "bg-white/10 text-white/60 hover:bg-white/20"
+                    }`}
+                  >
+                    Custom
+                  </button>
+                  {duration === "custom" && (
+                    <input
+                      type="number"
+                      placeholder="minutes"
+                      value={customDuration}
+                      onChange={(e) => setCustomDuration(e.target.value)}
+                      className="input-field flex-1 text-sm py-2"
+                      min={1}
+                      max={300}
+                    />
+                  )}
+                </div>
               </div>
 
-              {/* Gender Preference */}
-              <div className="mb-5">
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Preferred Partner Gender
+              {/* Topic/Subject */}
+              <div className="mb-6">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
+                  <svg className="w-4 h-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  Subject or Topic
                 </label>
-                <div className="radio-group">
-                  {["Any", "Male", "Female"].map((option) => (
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="What do you want to study?"
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    className="input-field pl-10"
+                  />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                </div>
+                {/* Quick topic suggestions */}
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {["Math", "Programming", "Physics", "Chemistry", "Languages", "History"].map((t) => (
                     <button
-                      key={option}
-                      onClick={() => setGenderPreference(option)}
-                      className={`radio-option ${genderPreference === option ? "selected" : ""}`}
+                      key={t}
+                      onClick={() => setTopic(t)}
+                      className={`text-xs px-3 py-1 rounded-full transition-all ${
+                        topic.toLowerCase() === t.toLowerCase()
+                          ? "bg-purple-500 text-white"
+                          : "bg-white/10 text-white/60 hover:bg-white/20"
+                      }`}
                     >
-                      {option}
+                      {t}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Topic */}
-              <div className="mb-5">
-                <label className="block text-sm font-medium text-white/80 mb-2">
-                  Subject or Topic
-                </label>
-                <input
-                  type="text"
-                  placeholder="Enter subject or topic (e.g., Math, Coding, Biology)"
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  className="input-field"
-                />
-              </div>
-
               {/* Study Mode */}
               <div className="mb-6">
-                <label className="block text-sm font-medium text-white/80 mb-2">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
+                  <svg className="w-4 h-4 text-pink-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
                   Study Mode
                 </label>
-                <div className="radio-group">
+                <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setStudyMode("video")}
-                    className={`radio-option ${studyMode === "video" ? "selected" : ""}`}
+                    className={`mode-btn ${studyMode === "video" ? "selected" : ""}`}
                   >
-                    📹 Video Call
+                    <div className="text-2xl mb-1">📹</div>
+                    <div className="font-medium">Video Call</div>
+                    <div className="text-xs opacity-70">Face to face</div>
                   </button>
                   <button
                     onClick={() => setStudyMode("text")}
-                    className={`radio-option ${studyMode === "text" ? "selected" : ""}`}
+                    className={`mode-btn ${studyMode === "text" ? "selected" : ""}`}
                   >
-                    💬 Text Chat
+                    <div className="text-2xl mb-1">💬</div>
+                    <div className="font-medium">Text Chat</div>
+                    <div className="text-xs opacity-70">Type messages</div>
                   </button>
+                </div>
+              </div>
+
+              {/* Gender Preference */}
+              <div className="mb-8">
+                <label className="flex items-center gap-2 text-sm font-medium text-white/90 mb-3">
+                  <svg className="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  Partner Preference
+                </label>
+                <div className="flex gap-2">
+                  {["Any", "Male", "Female"].map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => setGenderPreference(option)}
+                      className={`gender-btn flex-1 ${genderPreference === option ? "selected" : ""}`}
+                    >
+                      {option === "Any" ? "👥 Anyone" : option === "Male" ? "👨 Male" : "👩 Female"}
+                    </button>
+                  ))}
                 </div>
               </div>
 
               {/* Find Partner Button */}
               <button
                 onClick={findPartner}
-                className="w-full gradient-btn py-4 rounded-xl text-white font-semibold text-lg shadow-lg"
+                className="w-full gradient-btn py-4 rounded-xl text-white font-semibold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
               >
-                Find Study Partner
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  Find Study Partner
+                </span>
               </button>
             </div>
 

@@ -186,6 +186,58 @@ app.prepare().then(() => {
     return match;
   }
 
+  // Periodically check for matches for all waiting users
+  setInterval(() => {
+    if (waitingUsers.length < 2) return;
+    
+    // Try to find matches for all waiting users
+    for (let i = 0; i < waitingUsers.length; i++) {
+      const user = waitingUsers[i];
+      const match = findMatch(user);
+      
+      if (match && match.id !== user.id) {
+        // Remove both from waiting queue
+        const userIndex = waitingUsers.findIndex(w => w.id === user.id);
+        const matchIndex = waitingUsers.findIndex(w => w.id === match.id);
+        
+        if (userIndex > -1) waitingUsers.splice(userIndex, 1);
+        if (matchIndex > -1) waitingUsers.splice(matchIndex > userIndex ? matchIndex - 1 : matchIndex, 1);
+
+        // Create session
+        const sessionId = `${user.id}-${match.id}`;
+        const session = {
+          id: sessionId,
+          users: [user, match],
+          startTime: Date.now(),
+          duration: user.duration
+        };
+        activeSessions.set(sessionId, session);
+
+        // Notify both users
+        io.to(user.id).emit('match-found', {
+          sessionId,
+          partner: match,
+          isInitiator: true
+        });
+        io.to(match.id).emit('match-found', {
+          sessionId,
+          partner: user,
+          isInitiator: false
+        });
+
+        console.log(`Match found: ${user.id} with ${match.id}`);
+        break; // Exit loop after one match to avoid index issues
+      }
+    }
+  }, 2000); // Check every 2 seconds
+
+  // Also update queue positions periodically
+  setInterval(() => {
+    waitingUsers.forEach((user, index) => {
+      io.to(user.id).emit('waiting', { position: index + 1 });
+    });
+  }, 5000); // Update position every 5 seconds
+
   // Check if topics are related
   function isRelatedTopic(topic1, topic2) {
     const t1 = topic1.toLowerCase();
