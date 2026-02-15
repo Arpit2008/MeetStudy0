@@ -39,6 +39,10 @@
 - [x] **Improvement**: Changed queue position calculation to use indexOf for more reliability
 - [x] **Improvement**: Reduced bot fallback from 5 seconds to 3 seconds for faster testing
 - [x] **Improvement**: Added more detailed logging for debugging queue matching issues
+- [x] **Fix**: Added socket connectivity check in attemptMatch - verifies both sockets are still connected before matching
+- [x] **Fix**: Increased bot fallback delay from 3s to 5s to give real users more time to join
+- [x] **Fix**: Changed matching interval from 1s to 500ms for more aggressive matching
+- [x] **Fix**: Improved client-side connection timeout handling and error messages
 
 ## Current Structure
 
