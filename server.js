@@ -53,8 +53,10 @@ app.prepare().then(() => {
       
       // Try to match IMMEDIATELY - multiple attempts for reliability
       attemptMatch();
-      // Try again after small delay in case of race conditions
+      // Try again after small delays in case of race conditions
+      setTimeout(attemptMatch, 50);
       setTimeout(attemptMatch, 100);
+      setTimeout(attemptMatch, 200);
       setTimeout(attemptMatch, 500);
       
       // Bot fallback - only if still alone after 3 seconds (for faster testing)
@@ -256,7 +258,9 @@ app.prepare().then(() => {
       console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match NOW`);
       attemptMatch();
       // Try multiple times for reliability
+      setTimeout(attemptMatch, 50);
       setTimeout(attemptMatch, 100);
+      setTimeout(attemptMatch, 200);
       setTimeout(attemptMatch, 500);
     }
   }, 1000); // Check every 1 second
