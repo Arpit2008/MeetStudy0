@@ -209,14 +209,36 @@ app.prepare().then(() => {
       const realUser = waitingUsers[0];
       // Only create bot if real user has been waiting for 5+ seconds
       if (Date.now() - realUser.joinedAt > 5000) {
-        console.log(`[DEBUG] Creating bot for testing - real user waiting ${Date.now() - realUser.joinedAt}ms`);
+        console.log(`[DEBUG] Creating bot session for testing - real user waiting ${Date.now() - realUser.joinedAt}ms`);
+        
+        // Remove real user from queue
+        waitingUsers.shift();
+        
+        // Create bot user object
         const bot = {
           id: `bot-${Date.now()}`,
-          joinedAt: Date.now()
+          isBot: true
         };
-        waitingUsers.push(bot);
-        console.log(`[DEBUG] Bot added. Queue length: ${waitingUsers.length}`);
-        attemptMatch();
+        
+        // Create session directly
+        const sessionId = `${realUser.id}-${bot.id}`;
+        const session = {
+          id: sessionId,
+          users: [realUser, bot],
+          startTime: Date.now(),
+          duration: 30 * 60 * 1000
+        };
+        activeSessions.set(sessionId, session);
+        
+        // Notify the real user - they're matched with a bot!
+        io.to(realUser.id).emit('match-found', {
+          sessionId,
+          partner: bot,
+          isInitiator: true,
+          isBotSession: true
+        });
+        
+        console.log(`[DEBUG] Bot session created for ${realUser.id}`);
       }
     }
   }, 1000); // Check every 1 second

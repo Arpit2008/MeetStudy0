@@ -16,6 +16,7 @@ interface SessionData {
   sessionId: string;
   partner: PartnerData;
   isInitiator: boolean;
+  isBotSession?: boolean;
 }
 
 // Ice servers for WebRTC - Using reliable free TURN servers
@@ -436,11 +437,37 @@ export default function StudyBuddyConnect() {
         setSearchPosition(data.position);
       });
 
-      socketRef.current.on("match-found", (data: SessionData) => {
+      socketRef.current.on("match-found", async (data: SessionData) => {
         console.log("🎉 Match found!", data);
         setSessionData(data);
         setCurrentView("session");
         setTimeRemaining(30 * 60); // Default 30 minutes
+        
+        // Check if this is a bot session
+        if (data.isBotSession) {
+          console.log("🤖 Bot session - getting local stream");
+          try {
+            // Get local stream for bot session
+            const stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: true,
+            });
+            localStreamRef.current = stream;
+            setHasLocalStream(true);
+            
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = stream;
+            }
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = stream; // Mirror local to remote
+            }
+            setIsPeerConnected(true);
+            console.log("🤖 Bot session ready with local stream");
+          } catch (err) {
+            console.error("Error getting local stream for bot session:", err);
+          }
+          return;
+        }
         
         // Start WebRTC connection - always video
         startWebRTC(data);
