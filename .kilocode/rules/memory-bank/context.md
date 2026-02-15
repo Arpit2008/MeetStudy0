@@ -2,7 +2,7 @@
 
 ## Current State
 
-**Project Status**: ✅ Complete - Peer-to-peer study matching platform with bug fixes and UI improvements
+**Project Status**: ✅ Complete - Peer-to-peer study matching platform with queue fix
 
 ## Recently Completed
 
@@ -24,6 +24,10 @@
 - [x] **UI improvement**: Better styled gender preference buttons with icons
 - [x] **UI improvement**: Added icons and labels for all input sections
 - [x] **Theme**: Enhanced sky-blue theme with gradient background and more prominent blue colors
+- [x] **Critical fix**: Simplified queue matching to connect ANY two random users immediately (removed complex topic/duration matching logic)
+- [x] **Critical fix**: Client now waits for socket connection before emitting join-queue (no more race conditions)
+- [x] **Critical fix**: Added `attemptMatch()` function that simply grabs first 2 users from queue and matches them
+- [x] **Critical fix**: Better logging and connection error handling on client side
 
 ## Current Structure
 
