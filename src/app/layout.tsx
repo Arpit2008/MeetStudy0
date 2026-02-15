@@ -1,12 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 export const metadata: Metadata = {
   title: "StudyBuddy Connect - Find Your Perfect Study Partner",
   description: "A peer-to-peer study matching platform. Connect instantly with study partners for video calls or text chat. No login required, 100% private.",
   keywords: ["study partner", "online study", "peer learning", "video call", "study session"],
   authors: [{ name: "StudyBuddy" }],
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   themeColor: "#0ea5e9",
 };
 
