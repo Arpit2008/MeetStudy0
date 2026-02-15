@@ -31,6 +31,8 @@
 - [x] **Bug fix**: Fixed attemptMatch logic - removed redundant while loop, use recursion instead
 - [x] **Feature**: Auto-bot for testing - creates bot match after 5 seconds if user is alone in queue
 - [x] **Bug fix**: Bot now triggers immediately on join-queue (not just via interval) - fixes production deployment issue
+- [x] **Improvement**: Switched to more reliable STUN servers (Google + Twilio) - removed unreliable OpenRelay TURN servers
+- [x] **Improvement**: Added ICE connection timeout handler and automatic restart on failure
 
 ## Current Structure
 
