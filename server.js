@@ -154,23 +154,27 @@ app.prepare().then(() => {
     });
   });
 
-  // Matching algorithm
+  // Matching algorithm - more flexible to connect users faster
   function findMatch(user) {
-    // First, try to find perfect match (same topic, same duration, matching gender)
+    // If there are users waiting, find any available match
+    if (waitingUsers.length === 0) return null;
+    
+    // Try to find match with same topic (case insensitive or related)
     let match = waitingUsers.find(w => {
       const topicMatch = w.topic.toLowerCase() === user.topic.toLowerCase() || 
                          isRelatedTopic(w.topic, user.topic);
-      const durationMatch = w.duration === user.duration;
+      // Allow matching duration within 15 minutes tolerance
+      const durationMatch = Math.abs(w.duration - user.duration) <= 15;
       const genderMatch = user.genderPreference === 'Any' || 
                           w.genderPreference === 'Any' ||
                           user.genderPreference === w.gender;
       return topicMatch && durationMatch && genderMatch;
     });
 
-    // If no perfect match, find any available user
+    // If no topic match, try duration-only match (be more flexible)
     if (!match) {
       match = waitingUsers.find(w => {
-        const durationMatch = w.duration === user.duration;
+        const durationMatch = Math.abs(w.duration - user.duration) <= 15;
         const genderMatch = user.genderPreference === 'Any' || 
                            w.genderPreference === 'Any' ||
                            user.genderPreference === w.gender;
@@ -178,9 +182,15 @@ app.prepare().then(() => {
       });
     }
 
-    // If still no match, return any waiting user
+    // If still no match, return any waiting user (most flexible)
     if (!match && waitingUsers.length > 0) {
-      match = waitingUsers[0];
+      // Don't match with self
+      match = waitingUsers.find(w => w.id !== user.id) || waitingUsers[0];
+    }
+
+    // Make sure we don't match user with themselves
+    if (match && match.id === user.id) {
+      return null;
     }
 
     return match;

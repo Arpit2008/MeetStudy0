@@ -23,10 +23,26 @@ interface SessionData {
   isInitiator: boolean;
 }
 
-// Ice servers for WebRTC
+// Ice servers for WebRTC (STUN + TURN for better connectivity across devices)
 const iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
+  { 
+    urls: "turn:global.turn.metered.ca:80",
+    username: "metered",
+    credential: "metered"
+  },
+  { 
+    urls: "turn:global.turn.metered.ca:443",
+    username: "metered",
+    credential: "metered"
+  },
+  {
+    urls: "turn:global.turn.metered.ca:443?transport=tcp",
+    username: "metered",
+    credential: "metered"
+  }
 ];
 
 export default function StudyBuddyConnect() {
@@ -485,7 +501,7 @@ export default function StudyBuddyConnect() {
   }, []);
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? "dark bg-slate-900" : "bg-sky-50"}`}>
+    <div className={`min-h-screen ${isDarkMode ? "dark bg-slate-900" : "bg-gradient-to-b from-sky-100 via-sky-50 to-white"}`}>
       {/* Background Shapes */}
       <div className="bg-shapes">
         <div className="shape shape-1"></div>

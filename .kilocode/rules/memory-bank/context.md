@@ -16,11 +16,14 @@
 - [x] Privacy-focused design: no login, no history saved, 100% private sessions
 - [x] **Bug fix**: Queue matching now checks for matches every 2 seconds (was only checking when new users joined)
 - [x] **Bug fix**: Queue position updates now sent every 5 seconds
+- [x] **Bug fix**: Added TURN servers for better laptop-to-phone WebRTC connectivity (uses Metered.ca free TURN servers)
+- [x] **Bug fix**: Improved matching algorithm to be more flexible (allows 15-min duration tolerance, faster matching)
 - [x] **UI improvement**: New duration buttons (30m, 45m, 1h, 1.5h, 2h, 3h) with quick-select grid
 - [x] **UI improvement**: Quick topic suggestions (Math, Programming, Physics, Chemistry, Languages, History)
 - [x] **UI improvement**: Visual study mode cards with icons and descriptions
 - [x] **UI improvement**: Better styled gender preference buttons with icons
 - [x] **UI improvement**: Added icons and labels for all input sections
+- [x] **Theme**: Enhanced sky-blue theme with gradient background and more prominent blue colors
 
 ## Current Structure
 
