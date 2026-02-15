@@ -54,6 +54,15 @@ app.prepare().then(() => {
       // Try to match immediately after adding
       if (waitingUsers.length >= 2) {
         attemptMatch();
+      } else if (waitingUsers.length === 1) {
+        // For single user, create bot immediately after a short delay
+        setTimeout(() => {
+          // Check if still alone in queue
+          if (waitingUsers.length === 1 && waitingUsers[0].id === socket.id) {
+            console.log(`[Bot] Creating bot for single user ${socket.id}`);
+            createBotSession(socket.id);
+          }
+        }, 5000); // 5 second delay
       }
     });
 
@@ -191,6 +200,45 @@ app.prepare().then(() => {
     }
   }
 
+  // Function to create bot session for a single user
+  function createBotSession(userId) {
+    const realUser = waitingUsers.find(u => u.id === userId);
+    if (!realUser) {
+      console.log(`[Bot] User ${userId} not found in queue`);
+      return;
+    }
+    
+    // Remove real user from queue
+    const idx = waitingUsers.indexOf(realUser);
+    if (idx > -1) waitingUsers.splice(idx, 1);
+    
+    // Create bot user object
+    const bot = {
+      id: `bot-${Date.now()}`,
+      isBot: true
+    };
+    
+    // Create session directly
+    const sessionId = `${realUser.id}-${bot.id}`;
+    const session = {
+      id: sessionId,
+      users: [realUser, bot],
+      startTime: Date.now(),
+      duration: 30 * 60 * 1000
+    };
+    activeSessions.set(sessionId, session);
+    
+    // Notify the real user - they're matched with a bot!
+    io.to(realUser.id).emit('match-found', {
+      sessionId,
+      partner: bot,
+      isInitiator: true,
+      isBotSession: true
+    });
+    
+    console.log(`[Bot] Bot session created for ${realUser.id}`);
+  }
+
   // Periodically check for matches for all waiting users
   setInterval(() => {
     // First update queue positions
@@ -204,41 +252,13 @@ app.prepare().then(() => {
       attemptMatch();
     }
     
-    // DEBUG: Auto-create bot if someone is alone for testing
+    // Auto-create bot if someone is alone for testing
     if (waitingUsers.length === 1) {
       const realUser = waitingUsers[0];
       // Only create bot if real user has been waiting for 5+ seconds
       if (Date.now() - realUser.joinedAt > 5000) {
-        console.log(`[DEBUG] Creating bot session for testing - real user waiting ${Date.now() - realUser.joinedAt}ms`);
-        
-        // Remove real user from queue
-        waitingUsers.shift();
-        
-        // Create bot user object
-        const bot = {
-          id: `bot-${Date.now()}`,
-          isBot: true
-        };
-        
-        // Create session directly
-        const sessionId = `${realUser.id}-${bot.id}`;
-        const session = {
-          id: sessionId,
-          users: [realUser, bot],
-          startTime: Date.now(),
-          duration: 30 * 60 * 1000
-        };
-        activeSessions.set(sessionId, session);
-        
-        // Notify the real user - they're matched with a bot!
-        io.to(realUser.id).emit('match-found', {
-          sessionId,
-          partner: bot,
-          isInitiator: true,
-          isBotSession: true
-        });
-        
-        console.log(`[DEBUG] Bot session created for ${realUser.id}`);
+        console.log(`[Bot] Creating bot session - user waiting ${Date.now() - realUser.joinedAt}ms`);
+        createBotSession(realUser.id);
       }
     }
   }, 1000); // Check every 1 second
