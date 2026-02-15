@@ -36,7 +36,7 @@ app.prepare().then(() => {
         joinedAt: Date.now()
       };
 
-      // Check for matching user
+      // Check for matching user immediately
       const match = findMatch(user);
       
       if (match) {
@@ -74,6 +74,11 @@ app.prepare().then(() => {
         waitingUsers.push(user);
         socket.emit('waiting', { position: waitingUsers.length });
         console.log(`User ${socket.id} added to queue. Total waiting: ${waitingUsers.length}`);
+        
+        // Try to match immediately with newly added user
+        if (waitingUsers.length >= 2) {
+          attemptMatch();
+        }
       }
     });
 
@@ -161,80 +166,61 @@ app.prepare().then(() => {
     // If there are users waiting, find ANY available match
     if (waitingUsers.length === 0) return null;
     
-    // Find any user who is NOT ourselves
+    // Find the first user who is NOT ourselves
     const match = waitingUsers.find(w => w.id !== user.id);
     
-    // Make sure we don't match user with themselves
-    if (match && match.id === user.id) {
-      return null;
-    }
+    return match || null;
+  }
 
-    console.log(`Matching ${user.id} with ${match?.id || 'none'}. Queue size: ${waitingUsers.length}`);
-    return match;
+  // Try to match two users from the queue immediately
+  function attemptMatch() {
+    if (waitingUsers.length < 2) return;
+    
+    // Get first two users
+    const user1 = waitingUsers[0];
+    const user2 = waitingUsers[1];
+    
+    if (!user1 || !user2) return;
+    
+    // Remove both from waiting queue
+    waitingUsers.splice(0, 2);
+    
+    // Create session
+    const sessionId = `${user1.id}-${user2.id}`;
+    const session = {
+      id: sessionId,
+      users: [user1, user2],
+      startTime: Date.now(),
+      duration: user1.duration
+    };
+    activeSessions.set(sessionId, session);
+    
+    // Notify both users
+    io.to(user1.id).emit('match-found', {
+      sessionId,
+      partner: user2,
+      isInitiator: true
+    });
+    io.to(user2.id).emit('match-found', {
+      sessionId,
+      partner: user1,
+      isInitiator: false
+    });
+    
+    console.log(`Match found: ${user1.id} with ${user2.id}. Remaining: ${waitingUsers.length}`);
   }
 
   // Periodically check for matches for all waiting users - FASTER matching
   setInterval(() => {
-    if (waitingUsers.length < 2) return;
-    
-    console.log(`Periodic match check. Queue size: ${waitingUsers.length}`);
-    
-    // Try to find matches for all waiting users
-    for (let i = 0; i < waitingUsers.length; i++) {
-      const user = waitingUsers[i];
-      const match = findMatch(user);
-      
-      if (match && match.id !== user.id) {
-        // Remove both from waiting queue
-        const matchIndex = waitingUsers.findIndex(w => w.id === match.id);
-        
-        // Get both users before removing
-        const userIndex = i;
-        const mIndex = matchIndex;
-        
-        // Remove in reverse order to maintain indices
-        if (mIndex > userIndex) {
-          waitingUsers.splice(mIndex, 1);
-          waitingUsers.splice(userIndex, 1);
-        } else {
-          waitingUsers.splice(userIndex, 1);
-          waitingUsers.splice(mIndex, 1);
-        }
-
-        // Create session
-        const sessionId = `${user.id}-${match.id}`;
-        const session = {
-          id: sessionId,
-          users: [user, match],
-          startTime: Date.now(),
-          duration: user.duration
-        };
-        activeSessions.set(sessionId, session);
-
-        // Notify both users
-        io.to(user.id).emit('match-found', {
-          sessionId,
-          partner: match,
-          isInitiator: true
-        });
-        io.to(match.id).emit('match-found', {
-          sessionId,
-          partner: user,
-          isInitiator: false
-        });
-
-        console.log(`Match found: ${user.id} with ${match.id}. Remaining: ${waitingUsers.length}`);
-        break; // Exit loop after one match to avoid index issues
-      }
+    if (waitingUsers.length >= 2) {
+      attemptMatch();
     }
-  }, 1000); // Check every 1 second (faster!)
-
-  // Also update queue positions periodically
-  setInterval(() => {
+    
+    // Update queue positions
     waitingUsers.forEach((user, index) => {
       io.to(user.id).emit('waiting', { position: index + 1 });
     });
-  }, 5000); // Update position every 5 seconds
+  }, 1000); // Check every 1 second
 
   // Check if topics are related
   function isRelatedTopic(topic1, topic2) {

@@ -376,6 +376,7 @@ export default function StudyBuddyConnect() {
       socketRef.current = io({
         autoConnect: true,
         reconnection: true,
+        timeout: 10000,
       });
 
       socketRef.current.on("connect", () => {
@@ -383,6 +384,7 @@ export default function StudyBuddyConnect() {
       });
 
       socketRef.current.on("waiting", (data: { position: number }) => {
+        console.log("Waiting in queue, position:", data.position);
         setSearchPosition(data.position);
       });
 
@@ -418,6 +420,10 @@ export default function StudyBuddyConnect() {
       socketRef.current.on("disconnect", () => {
         console.log("Disconnected from server");
       });
+      
+      socketRef.current.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+      });
     }
     return socketRef.current;
   }, [studyMode, getActualDuration, startWebRTC, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, endSession]);
@@ -435,8 +441,9 @@ export default function StudyBuddyConnect() {
     // Wait for socket to be connected before emitting
     const emitJoinQueue = () => {
       if (!socket.connected) {
-        // Wait a bit more
-        setTimeout(emitJoinQueue, 100);
+        console.log("Socket not connected, waiting...");
+        // Wait a bit more - keep trying
+        setTimeout(emitJoinQueue, 200);
         return;
       }
       
@@ -449,12 +456,12 @@ export default function StudyBuddyConnect() {
         studyMode,
       };
 
-      console.log("Joining queue with:", userData);
+      console.log("Socket connected, joining queue with:", userData);
       socket.emit("join-queue", userData);
     };
     
-    // Small delay to ensure socket is ready
-    setTimeout(emitJoinQueue, 200);
+    // Start trying to join queue
+    emitJoinQueue();
   }, [topic, genderPreference, studyMode, initSocket, getActualDuration]);
 
   // Cancel search
