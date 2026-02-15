@@ -30,6 +30,7 @@
 - [x] **Bug fix**: Added pingTimeout/pingInterval to server to keep connections alive
 - [x] **Bug fix**: Fixed attemptMatch logic - removed redundant while loop, use recursion instead
 - [x] **Feature**: Auto-bot for testing - creates bot match after 5 seconds if user is alone in queue
+- [x] **Bug fix**: Bot now triggers immediately on join-queue (not just via interval) - fixes production deployment issue
 
 ## Current Structure
 
