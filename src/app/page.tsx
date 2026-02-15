@@ -432,16 +432,29 @@ export default function StudyBuddyConnect() {
     const socket = initSocket();
     setCurrentView("searching");
 
-    const userData: UserData = {
-      id: socket.id || "",
-      topic: topic.trim(),
-      duration: getActualDuration(),
-      gender: "Any",
-      genderPreference,
-      studyMode,
-    };
+    // Wait for socket to be connected before emitting
+    const emitJoinQueue = () => {
+      if (!socket.connected) {
+        // Wait a bit more
+        setTimeout(emitJoinQueue, 100);
+        return;
+      }
+      
+      const userData: UserData = {
+        id: socket.id || `user-${Date.now()}`,
+        topic: topic.trim(),
+        duration: getActualDuration(),
+        gender: "Any",
+        genderPreference,
+        studyMode,
+      };
 
-    socket.emit("join-queue", userData);
+      console.log("Joining queue with:", userData);
+      socket.emit("join-queue", userData);
+    };
+    
+    // Small delay to ensure socket is ready
+    setTimeout(emitJoinQueue, 200);
   }, [topic, genderPreference, studyMode, initSocket, getActualDuration]);
 
   // Cancel search

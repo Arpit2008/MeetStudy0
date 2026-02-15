@@ -28,6 +28,8 @@ app.prepare().then(() => {
 
     // User joins waiting queue
     socket.on('join-queue', (userData) => {
+      console.log('Join queue request from:', socket.id, 'Data:', userData);
+      
       const user = {
         id: socket.id,
         ...userData,
@@ -66,7 +68,7 @@ app.prepare().then(() => {
           isInitiator: false
         });
 
-        console.log(`Match found: ${user.id} with ${match.id}`);
+        console.log(`Immediate match: ${user.id} with ${match.id}`);
       } else {
         // Add to waiting queue
         waitingUsers.push(user);
@@ -154,51 +156,28 @@ app.prepare().then(() => {
     });
   });
 
-  // Matching algorithm - more flexible to connect users faster
+  // Matching algorithm - SIMPLE: connect any two users quickly
   function findMatch(user) {
-    // If there are users waiting, find any available match
+    // If there are users waiting, find ANY available match
     if (waitingUsers.length === 0) return null;
     
-    // Try to find match with same topic (case insensitive or related)
-    let match = waitingUsers.find(w => {
-      const topicMatch = w.topic.toLowerCase() === user.topic.toLowerCase() || 
-                         isRelatedTopic(w.topic, user.topic);
-      // Allow matching duration within 15 minutes tolerance
-      const durationMatch = Math.abs(w.duration - user.duration) <= 15;
-      const genderMatch = user.genderPreference === 'Any' || 
-                          w.genderPreference === 'Any' ||
-                          user.genderPreference === w.gender;
-      return topicMatch && durationMatch && genderMatch;
-    });
-
-    // If no topic match, try duration-only match (be more flexible)
-    if (!match) {
-      match = waitingUsers.find(w => {
-        const durationMatch = Math.abs(w.duration - user.duration) <= 15;
-        const genderMatch = user.genderPreference === 'Any' || 
-                           w.genderPreference === 'Any' ||
-                           user.genderPreference === w.gender;
-        return durationMatch && genderMatch;
-      });
-    }
-
-    // If still no match, return any waiting user (most flexible)
-    if (!match && waitingUsers.length > 0) {
-      // Don't match with self
-      match = waitingUsers.find(w => w.id !== user.id) || waitingUsers[0];
-    }
-
+    // Find any user who is NOT ourselves
+    const match = waitingUsers.find(w => w.id !== user.id);
+    
     // Make sure we don't match user with themselves
     if (match && match.id === user.id) {
       return null;
     }
 
+    console.log(`Matching ${user.id} with ${match?.id || 'none'}. Queue size: ${waitingUsers.length}`);
     return match;
   }
 
-  // Periodically check for matches for all waiting users
+  // Periodically check for matches for all waiting users - FASTER matching
   setInterval(() => {
     if (waitingUsers.length < 2) return;
+    
+    console.log(`Periodic match check. Queue size: ${waitingUsers.length}`);
     
     // Try to find matches for all waiting users
     for (let i = 0; i < waitingUsers.length; i++) {
@@ -207,11 +186,20 @@ app.prepare().then(() => {
       
       if (match && match.id !== user.id) {
         // Remove both from waiting queue
-        const userIndex = waitingUsers.findIndex(w => w.id === user.id);
         const matchIndex = waitingUsers.findIndex(w => w.id === match.id);
         
-        if (userIndex > -1) waitingUsers.splice(userIndex, 1);
-        if (matchIndex > -1) waitingUsers.splice(matchIndex > userIndex ? matchIndex - 1 : matchIndex, 1);
+        // Get both users before removing
+        const userIndex = i;
+        const mIndex = matchIndex;
+        
+        // Remove in reverse order to maintain indices
+        if (mIndex > userIndex) {
+          waitingUsers.splice(mIndex, 1);
+          waitingUsers.splice(userIndex, 1);
+        } else {
+          waitingUsers.splice(userIndex, 1);
+          waitingUsers.splice(mIndex, 1);
+        }
 
         // Create session
         const sessionId = `${user.id}-${match.id}`;
@@ -235,11 +223,11 @@ app.prepare().then(() => {
           isInitiator: false
         });
 
-        console.log(`Match found: ${user.id} with ${match.id}`);
+        console.log(`Match found: ${user.id} with ${match.id}. Remaining: ${waitingUsers.length}`);
         break; // Exit loop after one match to avoid index issues
       }
     }
-  }, 2000); // Check every 2 seconds
+  }, 1000); // Check every 1 second (faster!)
 
   // Also update queue positions periodically
   setInterval(() => {
