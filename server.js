@@ -57,7 +57,7 @@ app.prepare().then(() => {
       setTimeout(attemptMatch, 100);
       setTimeout(attemptMatch, 500);
       
-      // Bot fallback - only if still alone after 7 seconds
+      // Bot fallback - only if still alone after 5 seconds
       if (waitingUsers.length === 1) {
         setTimeout(() => {
           // Check if still alone in queue
@@ -65,7 +65,7 @@ app.prepare().then(() => {
             console.log(`[Bot] Creating bot for single user ${socket.id}`);
             createBotSession(socket.id);
           }
-        }, 7000); // 7 second delay - give real users time to match
+        }, 5000); // 5 second delay - give real users time to match
       }
     });
 
@@ -244,14 +244,16 @@ app.prepare().then(() => {
 
   // Periodically check for matches for all waiting users
   setInterval(() => {
-    // First update queue positions
+    // First update queue positions - send to ALL waiting users with logging
     waitingUsers.forEach((user, index) => {
-      io.to(user.id).emit('waiting', { position: index + 1 });
+      const position = index + 1;
+      io.to(user.id).emit('waiting', { position });
+      console.log(`[Queue] Sending position ${position} to user ${user.id}`);
     });
     
     // Try to match - call attemptMatch for each pair
     if (waitingUsers.length >= 2) {
-      console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match`);
+      console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match NOW`);
       attemptMatch();
       // Try multiple times for reliability
       setTimeout(attemptMatch, 100);
