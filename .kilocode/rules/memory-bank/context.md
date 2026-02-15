@@ -28,6 +28,8 @@
 - [x] **Bug fix**: Added detailed logging to server for debugging queue/matching issues
 - [x] **Bug fix**: Reduced client timeout from 20s to 5s to avoid connection timeout errors
 - [x] **Bug fix**: Added pingTimeout/pingInterval to server to keep connections alive
+- [x] **Bug fix**: Fixed attemptMatch logic - removed redundant while loop, use recursion instead
+- [x] **Feature**: Auto-bot for testing - creates bot match after 5 seconds if user is alone in queue
 
 ## Current Structure
 
