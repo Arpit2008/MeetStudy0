@@ -198,10 +198,26 @@ app.prepare().then(() => {
       io.to(user.id).emit('waiting', { position: index + 1 });
     });
     
-    // Then try to match - keep trying until no more matches possible
-    while (waitingUsers.length >= 2) {
+    // Try to match - call attemptMatch for each pair
+    if (waitingUsers.length >= 2) {
       console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match`);
       attemptMatch();
+    }
+    
+    // DEBUG: Auto-create bot if someone is alone for testing
+    if (waitingUsers.length === 1) {
+      const realUser = waitingUsers[0];
+      // Only create bot if real user has been waiting for 5+ seconds
+      if (Date.now() - realUser.joinedAt > 5000) {
+        console.log(`[DEBUG] Creating bot for testing - real user waiting ${Date.now() - realUser.joinedAt}ms`);
+        const bot = {
+          id: `bot-${Date.now()}`,
+          joinedAt: Date.now()
+        };
+        waitingUsers.push(bot);
+        console.log(`[DEBUG] Bot added. Queue length: ${waitingUsers.length}`);
+        attemptMatch();
+      }
     }
   }, 1000); // Check every 1 second
 
