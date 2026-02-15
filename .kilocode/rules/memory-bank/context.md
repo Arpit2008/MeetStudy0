@@ -35,6 +35,10 @@
 - [x] **Improvement**: Added ICE connection timeout handler and automatic restart on failure
 - [x] **Critical fix**: Fixed WebRTC ICE candidate handling - now uses data parameter directly instead of relying on sessionData state (which could be null)
 - [x] **Critical fix**: Fixed handleWebRTCOffer - now gets local stream BEFORE creating peer connection, and properly sets up ICE handlers with correct targetId
+- [x] **Improvement**: Made matching more aggressive with multiple retry attempts at 50ms, 100ms, 200ms, 500ms intervals
+- [x] **Improvement**: Changed queue position calculation to use indexOf for more reliability
+- [x] **Improvement**: Reduced bot fallback from 5 seconds to 3 seconds for faster testing
+- [x] **Improvement**: Added more detailed logging for debugging queue matching issues
 
 ## Current Structure
 
