@@ -57,7 +57,7 @@ app.prepare().then(() => {
       setTimeout(attemptMatch, 100);
       setTimeout(attemptMatch, 500);
       
-      // Bot fallback - only if still alone after 5 seconds
+      // Bot fallback - only if still alone after 3 seconds (for faster testing)
       if (waitingUsers.length === 1) {
         setTimeout(() => {
           // Check if still alone in queue
@@ -65,7 +65,7 @@ app.prepare().then(() => {
             console.log(`[Bot] Creating bot for single user ${socket.id}`);
             createBotSession(socket.id);
           }
-        }, 5000); // 5 second delay - give real users time to match
+        }, 3000); // 3 second delay
       }
     });
 
