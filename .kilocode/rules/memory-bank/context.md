@@ -24,6 +24,7 @@
 - [x] **UI simplification**: Always uses 30-minute video sessions (no more mode selection)
 - [x] **UI improvement**: Clean, simple landing page with single call-to-action button
 - [x] **Bug fix**: Fixed matching queue - users now added to queue first, then immediate match attempt
+- [x] **Critical fix**: Socket connection now uses explicit server URL and has reconnection logic with up to 10 attempts
 
 ## Current Structure
 
