@@ -549,8 +549,9 @@ export default function StudyBuddyConnect() {
         return;
       }
       
+      // Use socket.id for reliable identification
       const userData: UserData = {
-        id: socket.id || `user-${Date.now()}`,
+        id: socket.id,
       };
 
       console.log("Socket connected, joining queue with id:", socket.id);

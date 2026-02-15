@@ -47,9 +47,9 @@ app.prepare().then(() => {
 
       // Add to waiting queue FIRST
       waitingUsers.push(user);
-      const position = waitingUsers.length;
+      const position = waitingUsers.indexOf(user) + 1; // Use indexOf to get position
       socket.emit('waiting', { position });
-      console.log(`User ${socket.id} added to queue. Total waiting: ${waitingUsers.length}`);
+      console.log(`User ${socket.id} added to queue at position ${position}. Total waiting: ${waitingUsers.length}`);
       
       // Try to match IMMEDIATELY - multiple attempts for reliability
       attemptMatch();
