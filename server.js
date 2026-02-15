@@ -30,55 +30,28 @@ app.prepare().then(() => {
     socket.on('join-queue', (userData) => {
       console.log('Join queue request from:', socket.id, 'Data:', userData);
       
+      // Prevent duplicate entries - check if already in queue
+      const existingIndex = waitingUsers.findIndex(w => w.id === socket.id);
+      if (existingIndex > -1) {
+        console.log('User already in queue, skipping');
+        return;
+      }
+      
       const user = {
         id: socket.id,
         ...userData,
         joinedAt: Date.now()
       };
 
-      // Check for matching user immediately
-      const match = findMatch(user);
+      // Add to waiting queue FIRST
+      waitingUsers.push(user);
+      const position = waitingUsers.length;
+      socket.emit('waiting', { position });
+      console.log(`User ${socket.id} added to queue. Total waiting: ${waitingUsers.length}`);
       
-      if (match) {
-        // Remove match from waiting
-        const matchIndex = waitingUsers.findIndex(w => w.id === match.id);
-        if (matchIndex > -1) {
-          waitingUsers.splice(matchIndex, 1);
-        }
-
-        // Create session
-        const sessionId = `${user.id}-${match.id}`;
-        const session = {
-          id: sessionId,
-          users: [user, match],
-          startTime: Date.now(),
-          duration: user.duration
-        };
-        activeSessions.set(sessionId, session);
-
-        // Notify both users
-        io.to(user.id).emit('match-found', {
-          sessionId,
-          partner: match,
-          isInitiator: true
-        });
-        io.to(match.id).emit('match-found', {
-          sessionId,
-          partner: user,
-          isInitiator: false
-        });
-
-        console.log(`Immediate match: ${user.id} with ${match.id}`);
-      } else {
-        // Add to waiting queue
-        waitingUsers.push(user);
-        socket.emit('waiting', { position: waitingUsers.length });
-        console.log(`User ${socket.id} added to queue. Total waiting: ${waitingUsers.length}`);
-        
-        // Try to match immediately with newly added user
-        if (waitingUsers.length >= 2) {
-          attemptMatch();
-        }
+      // Try to match immediately after adding
+      if (waitingUsers.length >= 2) {
+        attemptMatch();
       }
     });
 
@@ -161,17 +134,6 @@ app.prepare().then(() => {
     });
   });
 
-  // Matching algorithm - SIMPLE: connect any two users quickly
-  function findMatch(user) {
-    // If there are users waiting, find ANY available match
-    if (waitingUsers.length === 0) return null;
-    
-    // Find the first user who is NOT ourselves
-    const match = waitingUsers.find(w => w.id !== user.id);
-    
-    return match || null;
-  }
-
   // Try to match two users from the queue immediately
   function attemptMatch() {
     if (waitingUsers.length < 2) return;
@@ -191,7 +153,7 @@ app.prepare().then(() => {
       id: sessionId,
       users: [user1, user2],
       startTime: Date.now(),
-      duration: user1.duration
+      duration: 30 * 60 * 1000 // 30 minutes in ms
     };
     activeSessions.set(sessionId, session);
     
@@ -210,7 +172,7 @@ app.prepare().then(() => {
     console.log(`Match found: ${user1.id} with ${user2.id}. Remaining: ${waitingUsers.length}`);
   }
 
-  // Periodically check for matches for all waiting users - FASTER matching
+  // Periodically check for matches for all waiting users
   setInterval(() => {
     if (waitingUsers.length >= 2) {
       attemptMatch();
@@ -221,28 +183,6 @@ app.prepare().then(() => {
       io.to(user.id).emit('waiting', { position: index + 1 });
     });
   }, 1000); // Check every 1 second
-
-  // Check if topics are related
-  function isRelatedTopic(topic1, topic2) {
-    const t1 = topic1.toLowerCase();
-    const t2 = topic2.toLowerCase();
-    
-    const relatedGroups = [
-      ['math', 'mathematics', 'algebra', 'calculus', 'geometry', 'statistics'],
-      ['coding', 'programming', 'code', 'javascript', 'python', 'java', 'web dev'],
-      ['biology', 'bio', 'chemistry', 'physics', 'science'],
-      ['english', 'language', 'writing', 'literature'],
-      ['history', 'social studies', 'geography']
-    ];
-
-    for (const group of relatedGroups) {
-      if (group.includes(t1) && group.includes(t2)) {
-        return true;
-      }
-    }
-    
-    return false;
-  }
 
   // Handle all other routes with Next.js
   server.all('*', (req, res) => {

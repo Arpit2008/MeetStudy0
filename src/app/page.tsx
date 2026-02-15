@@ -407,9 +407,17 @@ export default function StudyBuddyConnect() {
     setCurrentView("searching");
 
     // Wait for socket to be connected before emitting
+    let attempts = 0;
     const emitJoinQueue = () => {
+      attempts++;
+      if (attempts > 25) { // 5 seconds max wait
+        console.log("Timeout waiting for socket connection");
+        setCurrentView("landing");
+        return;
+      }
+      
       if (!socket.connected) {
-        console.log("Socket not connected, waiting...");
+        console.log("Socket not connected, waiting... attempt", attempts);
         setTimeout(emitJoinQueue, 200);
         return;
       }
@@ -418,7 +426,7 @@ export default function StudyBuddyConnect() {
         id: socket.id || `user-${Date.now()}`,
       };
 
-      console.log("Socket connected, joining queue...");
+      console.log("Socket connected, joining queue with id:", socket.id);
       socket.emit("join-queue", userData);
     };
     
