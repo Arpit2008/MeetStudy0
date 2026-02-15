@@ -139,48 +139,52 @@ app.prepare().then(() => {
   // Try to match two users from the queue immediately
   function attemptMatch() {
     console.log(`[attemptMatch] Called. Current queue length: ${waitingUsers.length}`);
-    if (waitingUsers.length < 2) {
-      console.log(`[attemptMatch] Not enough users (${waitingUsers.length}), skipping`);
-      return;
+    
+    // Keep matching until we have less than 2 users
+    while (waitingUsers.length >= 2) {
+      if (waitingUsers.length < 2) {
+        console.log(`[attemptMatch] Not enough users (${waitingUsers.length}), skipping`);
+        return;
+      }
+      
+      // Get first two users
+      const user1 = waitingUsers[0];
+      const user2 = waitingUsers[1];
+      
+      if (!user1 || !user2) {
+        console.log(`[attemptMatch] User undefined: user1=${!!user1}, user2=${!!user2}`);
+        return;
+      }
+      
+      console.log(`[attemptMatch] Matching user1=${user1.id} with user2=${user2.id}`);
+      
+      // Remove both from waiting queue
+      waitingUsers.splice(0, 2);
+      
+      // Create session
+      const sessionId = `${user1.id}-${user2.id}`;
+      const session = {
+        id: sessionId,
+        users: [user1, user2],
+        startTime: Date.now(),
+        duration: 30 * 60 * 1000 // 30 minutes in ms
+      };
+      activeSessions.set(sessionId, session);
+      
+      // Notify both users
+      io.to(user1.id).emit('match-found', {
+        sessionId,
+        partner: user2,
+        isInitiator: true
+      });
+      io.to(user2.id).emit('match-found', {
+        sessionId,
+        partner: user1,
+        isInitiator: false
+      });
+      
+      console.log(`✅ Match found: ${user1.id} with ${user2.id}. Remaining: ${waitingUsers.length}`);
     }
-    
-    // Get first two users
-    const user1 = waitingUsers[0];
-    const user2 = waitingUsers[1];
-    
-    if (!user1 || !user2) {
-      console.log(`[attemptMatch] User undefined: user1=${!!user1}, user2=${!!user2}`);
-      return;
-    }
-    
-    console.log(`[attemptMatch] Matching user1=${user1.id} with user2=${user2.id}`);
-    
-    // Remove both from waiting queue
-    waitingUsers.splice(0, 2);
-    
-    // Create session
-    const sessionId = `${user1.id}-${user2.id}`;
-    const session = {
-      id: sessionId,
-      users: [user1, user2],
-      startTime: Date.now(),
-      duration: 30 * 60 * 1000 // 30 minutes in ms
-    };
-    activeSessions.set(sessionId, session);
-    
-    // Notify both users
-    io.to(user1.id).emit('match-found', {
-      sessionId,
-      partner: user2,
-      isInitiator: true
-    });
-    io.to(user2.id).emit('match-found', {
-      sessionId,
-      partner: user1,
-      isInitiator: false
-    });
-    
-    console.log(`Match found: ${user1.id} with ${user2.id}. Remaining: ${waitingUsers.length}`);
   }
 
   // Periodically check for matches for all waiting users
@@ -190,8 +194,8 @@ app.prepare().then(() => {
       io.to(user.id).emit('waiting', { position: index + 1 });
     });
     
-    // Then try to match
-    if (waitingUsers.length >= 2) {
+    // Then try to match - keep trying until no more matches possible
+    while (waitingUsers.length >= 2) {
       console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match`);
       attemptMatch();
     }

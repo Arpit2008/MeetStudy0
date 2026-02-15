@@ -432,12 +432,12 @@ export default function StudyBuddyConnect() {
       });
 
       socketRef.current.on("waiting", (data: { position: number }) => {
-        console.log("Waiting in queue, position:", data.position);
+        console.log("📍 Waiting in queue, position:", data.position);
         setSearchPosition(data.position);
       });
 
       socketRef.current.on("match-found", (data: SessionData) => {
-        console.log("Match found!", data);
+        console.log("🎉 Match found!", data);
         setSessionData(data);
         setCurrentView("session");
         setTimeRemaining(30 * 60); // Default 30 minutes
@@ -473,9 +473,10 @@ export default function StudyBuddyConnect() {
 
     // Wait for socket to be connected before emitting
     let attempts = 0;
+    const maxAttempts = 100; // 20 seconds max wait
     const emitJoinQueue = () => {
       attempts++;
-      if (attempts > 25) { // 5 seconds max wait
+      if (attempts > maxAttempts) {
         console.log("Timeout waiting for socket connection");
         setCurrentView("landing");
         return;
