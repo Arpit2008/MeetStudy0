@@ -2,7 +2,7 @@
 
 ## Current State
 
-**Project Status**: ✅ Complete - Peer-to-peer study matching platform built and tested
+**Project Status**: ✅ Complete - Peer-to-peer study matching platform with bug fixes and UI improvements
 
 ## Recently Completed
 
@@ -14,6 +14,13 @@
 - [x] Study session UI with timer, video controls, mute buttons
 - [x] Optional features: dark mode toggle, sound toggle, completion popup
 - [x] Privacy-focused design: no login, no history saved, 100% private sessions
+- [x] **Bug fix**: Queue matching now checks for matches every 2 seconds (was only checking when new users joined)
+- [x] **Bug fix**: Queue position updates now sent every 5 seconds
+- [x] **UI improvement**: New duration buttons (30m, 45m, 1h, 1.5h, 2h, 3h) with quick-select grid
+- [x] **UI improvement**: Quick topic suggestions (Math, Programming, Physics, Chemistry, Languages, History)
+- [x] **UI improvement**: Visual study mode cards with icons and descriptions
+- [x] **UI improvement**: Better styled gender preference buttons with icons
+- [x] **UI improvement**: Added icons and labels for all input sections
 
 ## Current Structure
 
@@ -33,12 +40,15 @@ bun run dev  # Starts both Next.js and Socket.io server on port 3000
 ## Key Features Implemented
 
 1. **User Input Panel** - Glassmorphism center box with:
-   - Study duration dropdown (30/60/90 min or custom)
-   - Gender preference (Any/Male/Female)
-   - Topic/subject input
-   - Study mode toggle (Video Call / Text Chat)
+   - Study duration buttons (30m to 3h quick-select + custom)
+   - Quick topic suggestions
+   - Gender preference with icons (Anyone/Male/Female)
+   - Topic/subject input with search icon
+   - Visual study mode cards (Video Call / Text Chat)
 
 2. **Matching System** - Queue-based matching with:
+   - Periodic match checking every 2 seconds
+   - Queue position updates every 5 seconds
    - Same/related topic matching
    - Duration preference matching
    - Gender preference filtering
