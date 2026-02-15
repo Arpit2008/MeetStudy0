@@ -25,6 +25,9 @@
 - [x] **UI improvement**: Clean, simple landing page with single call-to-action button
 - [x] **Bug fix**: Fixed matching queue - users now added to queue first, then immediate match attempt
 - [x] **Critical fix**: Socket connection now uses explicit server URL and has reconnection logic with up to 10 attempts
+- [x] **Bug fix**: Added detailed logging to server for debugging queue/matching issues
+- [x] **Bug fix**: Reduced client timeout from 20s to 5s to avoid connection timeout errors
+- [x] **Bug fix**: Added pingTimeout/pingInterval to server to keep connections alive
 
 ## Current Structure
 

@@ -398,7 +398,7 @@ export default function StudyBuddyConnect() {
         reconnectionAttempts: 10,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        timeout: 20000,
+        timeout: 5000,
         transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
       });
 

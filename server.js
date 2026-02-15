@@ -19,7 +19,9 @@ app.prepare().then(() => {
     cors: {
       origin: "*",
       methods: ["GET", "POST"]
-    }
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
 
   // Socket.io signaling server
@@ -136,13 +138,22 @@ app.prepare().then(() => {
 
   // Try to match two users from the queue immediately
   function attemptMatch() {
-    if (waitingUsers.length < 2) return;
+    console.log(`[attemptMatch] Called. Current queue length: ${waitingUsers.length}`);
+    if (waitingUsers.length < 2) {
+      console.log(`[attemptMatch] Not enough users (${waitingUsers.length}), skipping`);
+      return;
+    }
     
     // Get first two users
     const user1 = waitingUsers[0];
     const user2 = waitingUsers[1];
     
-    if (!user1 || !user2) return;
+    if (!user1 || !user2) {
+      console.log(`[attemptMatch] User undefined: user1=${!!user1}, user2=${!!user2}`);
+      return;
+    }
+    
+    console.log(`[attemptMatch] Matching user1=${user1.id} with user2=${user2.id}`);
     
     // Remove both from waiting queue
     waitingUsers.splice(0, 2);
@@ -174,14 +185,16 @@ app.prepare().then(() => {
 
   // Periodically check for matches for all waiting users
   setInterval(() => {
-    if (waitingUsers.length >= 2) {
-      attemptMatch();
-    }
-    
-    // Update queue positions
+    // First update queue positions
     waitingUsers.forEach((user, index) => {
       io.to(user.id).emit('waiting', { position: index + 1 });
     });
+    
+    // Then try to match
+    if (waitingUsers.length >= 2) {
+      console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match`);
+      attemptMatch();
+    }
   }, 1000); // Check every 1 second
 
   // Handle all other routes with Next.js
