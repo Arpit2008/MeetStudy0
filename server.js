@@ -59,7 +59,7 @@ app.prepare().then(() => {
       setTimeout(attemptMatch, 200);
       setTimeout(attemptMatch, 500);
       
-      // Bot fallback - only if still alone after 3 seconds (for faster testing)
+      // Bot fallback - only if still alone after 5 seconds (increased from 3s)
       if (waitingUsers.length === 1) {
         setTimeout(() => {
           // Check if still alone in queue
@@ -67,7 +67,7 @@ app.prepare().then(() => {
             console.log(`[Bot] Creating bot for single user ${socket.id}`);
             createBotSession(socket.id);
           }
-        }, 3000); // 3 second delay
+        }, 5000); // 5 second delay - give real users more time to join
       }
     });
 
@@ -160,12 +160,31 @@ app.prepare().then(() => {
       return;
     }
     
-    // Get first two users
+    // Get first two users (check they exist and are not undefined)
     const user1 = waitingUsers[0];
     const user2 = waitingUsers[1];
     
     if (!user1 || !user2) {
       console.log(`[attemptMatch] User undefined: user1=${!!user1}, user2=${!!user2}`);
+      return;
+    }
+    
+    // Check if both users are still connected (have active socket connections)
+    // We verify this by checking the socket exists in io.sockets.sockets
+    const socket1 = io.sockets.sockets.get(user1.id);
+    const socket2 = io.sockets.sockets.get(user2.id);
+    
+    if (!socket1 || !socket2) {
+      console.log(`[attemptMatch] One or both sockets not connected, cleaning up queue`);
+      // Remove disconnected users from queue
+      if (!socket1 && user1) {
+        const idx = waitingUsers.findIndex(w => w.id === user1.id);
+        if (idx > -1) waitingUsers.splice(idx, 1);
+      }
+      if (!socket2 && user2) {
+        const idx = waitingUsers.findIndex(w => w.id === user2.id);
+        if (idx > -1) waitingUsers.splice(idx, 1);
+      }
       return;
     }
     
@@ -244,7 +263,7 @@ app.prepare().then(() => {
     console.log(`[Bot] Bot session created for ${realUser.id}`);
   }
 
-  // Periodically check for matches for all waiting users
+  // Periodically check for matches for all waiting users - more aggressive checking
   setInterval(() => {
     // First update queue positions - send to ALL waiting users with logging
     waitingUsers.forEach((user, index) => {
@@ -263,7 +282,7 @@ app.prepare().then(() => {
       setTimeout(attemptMatch, 200);
       setTimeout(attemptMatch, 500);
     }
-  }, 1000); // Check every 1 second
+  }, 500); // Check every 500ms - more aggressive matching
 
   // Handle all other routes with Next.js
   server.all('*', (req, res) => {

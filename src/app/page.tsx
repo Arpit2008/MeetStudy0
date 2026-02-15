@@ -544,18 +544,20 @@ export default function StudyBuddyConnect() {
     return socketRef.current;
   }, [startWebRTC, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, endSession]);
 
-  // Find partner - simplified
+  // Find partner - simplified with better connection handling
   const findPartner = useCallback(() => {
     const socket = initSocket();
     setCurrentView("searching");
 
-    // Wait for socket to be connected before emitting
+    // Wait for socket to be connected before emitting - with better timeout handling
     let attempts = 0;
-    const maxAttempts = 100; // 20 seconds max wait
+    const maxAttempts = 50; // 10 seconds max wait (200ms * 50)
     const emitJoinQueue = () => {
       attempts++;
+      
       if (attempts > maxAttempts) {
         console.log("Timeout waiting for socket connection");
+        alert("Could not connect to server. Please try again.");
         setCurrentView("landing");
         return;
       }
@@ -577,7 +579,7 @@ export default function StudyBuddyConnect() {
         id: socket.id,
       };
 
-      console.log("Socket connected, joining queue with id:", socket.id);
+      console.log("Socket connected (id:", socket.id, "), joining queue");
       socket.emit("join-queue", userData);
     };
     
