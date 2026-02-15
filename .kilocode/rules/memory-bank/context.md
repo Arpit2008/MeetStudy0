@@ -33,6 +33,8 @@
 - [x] **Bug fix**: Bot now triggers immediately on join-queue (not just via interval) - fixes production deployment issue
 - [x] **Improvement**: Switched to more reliable STUN servers (Google + Twilio) - removed unreliable OpenRelay TURN servers
 - [x] **Improvement**: Added ICE connection timeout handler and automatic restart on failure
+- [x] **Critical fix**: Fixed WebRTC ICE candidate handling - now uses data parameter directly instead of relying on sessionData state (which could be null)
+- [x] **Critical fix**: Fixed handleWebRTCOffer - now gets local stream BEFORE creating peer connection, and properly sets up ICE handlers with correct targetId
 
 ## Current Structure
 
