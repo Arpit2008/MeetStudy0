@@ -203,14 +203,14 @@ export default function StudyBuddyConnect() {
         }
       };
 
-      // Handle ICE candidates
+      // Handle ICE candidates - use data parameter, not sessionData state
       pc.onicecandidate = (event) => {
-        if (event.candidate && socketRef.current && sessionData) {
+        if (event.candidate && socketRef.current) {
           // Send ICE candidate to peer through signaling server
           socketRef.current.emit("ice-candidate", {
-            sessionId: sessionData.sessionId,
+            sessionId: data.sessionId,
             candidate: event.candidate,
-            targetId: sessionData.partner.id,
+            targetId: data.partner.id,
           });
         }
       };
@@ -234,6 +234,7 @@ export default function StudyBuddyConnect() {
 
       // If initiator, create offer
       if (data.isInitiator) {
+        console.log("Creating WebRTC offer as initiator...");
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         
@@ -242,18 +243,36 @@ export default function StudyBuddyConnect() {
           offer,
           targetId: data.partner.id,
         });
+        console.log("WebRTC offer sent");
       }
     } catch (error) {
       console.error("Error starting WebRTC:", error);
       alert("Could not access camera/microphone. Please check permissions.");
       endSessionRef.current();
     }
-  }, [sessionData]);
+  }, []);
 
   const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
     try {
+      console.log("Received WebRTC offer from:", data.from);
+      
+      // First, get local stream BEFORE creating peer connection
+      let stream = localStreamRef.current;
+      if (!stream) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localStreamRef.current = stream;
+        setHasLocalStream(true);
+        
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+      }
+
+      // Create peer connection if not exists
       if (!peerConnectionRef.current) {
-        // Create peer connection if not exists - use same config
         const pcConfig = {
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
@@ -268,62 +287,61 @@ export default function StudyBuddyConnect() {
         const pc = new RTCPeerConnection(pcConfig);
         peerConnectionRef.current = pc;
 
+        // Handle ICE connection state changes FIRST
+        pc.oniceconnectionstatechange = () => {
+          console.log("ICE Connection State (receiver):", pc.iceConnectionState);
+          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            setIsPeerConnected(true);
+            setConnectionError(null);
+            console.log("✅ Peer connected (receiver)!");
+          }
+          if (pc.iceConnectionState === "failed") {
+            console.log("❌ ICE failed on receiver, restarting...");
+            pc.restartIce();
+          }
+          if (pc.iceConnectionState === "disconnected") {
+            console.log("⚠️ ICE disconnected on receiver, restarting...");
+            pc.restartIce();
+          }
+        };
+
         // Handle incoming tracks
         pc.ontrack = (event) => {
+          console.log("Received remote track");
           setIsPeerConnected(true);
           if (remoteVideoRef.current && event.streams[0]) {
             remoteVideoRef.current.srcObject = event.streams[0];
           }
         };
 
-        pc.onicecandidate = (event) => {
-          if (event.candidate && socketRef.current && sessionData) {
-            socketRef.current.emit("ice-candidate", {
-              sessionId: sessionData.sessionId,
-              candidate: event.candidate,
-              targetId: sessionData?.partner.id,
-            });
-          }
-        };
-
-        // Handle ICE connection state changes
-        pc.oniceconnectionstatechange = () => {
-          console.log("ICE Connection State (receiver):", pc.iceConnectionState);
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-            setIsPeerConnected(true);
-          }
-          if (pc.iceConnectionState === "failed") {
-            console.log("❌ ICE failed on receiver, restarting...");
-            pc.restartIce();
-          }
-        };
-
-        // Get local stream - always video now
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-        localStreamRef.current = stream;
-        setHasLocalStream(true);
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream);
-        });
-
-        // Always create data channel for chat
+        // Handle data channel for chat
         pc.ondatachannel = (event) => {
+          console.log("Data channel received");
           dataChannelRef.current = event.channel;
           event.channel.onmessage = (e) => {
             const message = JSON.parse(e.data);
             setChatMessages((prev) => [...prev, message]);
           };
         };
+
+        // Handle ICE candidates - use 'from' from the offer
+        pc.onicecandidate = (event) => {
+          if (event.candidate && socketRef.current) {
+            socketRef.current.emit("ice-candidate", {
+              sessionId: data.sessionId,
+              candidate: event.candidate,
+              targetId: data.from, // Use 'from' from the offer data
+            });
+          }
+        };
+
+        // Add local tracks
+        stream.getTracks().forEach((track) => {
+          pc.addTrack(track, stream!);
+        });
       }
 
+      // Set remote description and create answer
       await peerConnectionRef.current.setRemoteDescription(data.offer);
       const answer = await peerConnectionRef.current.createAnswer();
       await peerConnectionRef.current.setLocalDescription(answer);
@@ -333,10 +351,12 @@ export default function StudyBuddyConnect() {
         answer,
         targetId: data.from,
       });
+      
+      console.log("Sent WebRTC answer");
     } catch (error) {
       console.error("Error handling offer:", error);
     }
-  }, [sessionData]);
+  }, []);
 
   const handleWebRTCAnswer = useCallback(async (data: { answer: RTCSessionDescriptionInit; from: string }) => {
     try {
