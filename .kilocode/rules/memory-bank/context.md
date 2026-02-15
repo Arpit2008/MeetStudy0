@@ -23,6 +23,7 @@
 - [x] **UI simplification**: Removed all options (duration, gender, topic, study mode) - now just ONE "Find a Study Partner" button
 - [x] **UI simplification**: Always uses 30-minute video sessions (no more mode selection)
 - [x] **UI improvement**: Clean, simple landing page with single call-to-action button
+- [x] **Bug fix**: Fixed matching queue - users now added to queue first, then immediate match attempt
 
 ## Current Structure
 
