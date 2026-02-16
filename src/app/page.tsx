@@ -507,79 +507,82 @@ export default function StudyBuddyConnect() {
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark bg-slate-900' : 'bg-gradient-to-br from-sky-100 to-indigo-100'}`}>
       <div className="min-h-screen transition-colors duration-300">
-        {/* Header */}
-        <header className="p-4 flex justify-between items-center">
-          <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
-            StudyBuddy Connect 🎓
+        {/* Header - Mobile optimized */}
+        <header className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md">
+          <h1 className={`text-lg sm:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'} flex items-center gap-2`}>
+            <span className="text-2xl sm:text-3xl animate-bounce-subtle">🎓</span>
+            <span className="hidden sm:inline">StudyBuddy Connect</span>
+            <span className="sm:hidden">StudyBuddy</span>
           </h1>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button
               onClick={shareLink}
-              className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-white text-indigo-600 hover:bg-indigo-50'} shadow-lg hover:scale-110 transition-transform`}
+              className={`p-2.5 sm:p-2 rounded-full ${isDarkMode ? 'bg-slate-700/80 text-white hover:bg-slate-600' : 'bg-white/80 text-indigo-600 hover:bg-indigo-50'} shadow-lg hover:scale-110 active:scale-95 transition-all duration-200 backdrop-blur`}
               title="Invite friends"
             >
-              📤
+              <span className="text-lg sm:text-xl">📤</span>
             </button>
             <button
               onClick={toggleDarkMode}
-              className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-yellow-300' : 'bg-white text-indigo-600'} shadow-lg hover:scale-110 transition-transform`}
+              className={`p-2.5 sm:p-2 rounded-full ${isDarkMode ? 'bg-slate-700/80 text-yellow-300 hover:bg-slate-600' : 'bg-white/80 text-indigo-600'} shadow-lg hover:scale-110 active:scale-95 transition-all duration-200 backdrop-blur`}
             >
-              {isDarkMode ? '☀️' : '🌙'}
+              <span className="text-lg sm:text-xl">{isDarkMode ? '☀️' : '🌙'}</span>
             </button>
           </div>
         </header>
 
         {/* Main Content */}
-        <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-4xl">
           {connectionError && (
-            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg animate-shake">
               {connectionError}
             </div>
           )}
           
           {/* Landing View */}
           {currentView === "landing" && (
-            <div className="text-center py-20">
+            <div className="text-center py-8 sm:py-16 animate-fade-in">
               {/* Connection Status */}
               <div className="mb-6">
-                <span className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                <span className="inline-flex items-center px-3 sm:px-4 py-1.5 sm:py-2 bg-green-100/90 text-green-800 rounded-full text-sm sm:text-base backdrop-blur">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
                   Ready to Connect (P2P)
                 </span>
               </div>
               
-              <div className="mb-8">
-                <span className="text-8xl">📚</span>
+              <div className="mb-6 sm:mb-8">
+                <span className="text-6xl sm:text-8xl inline-block animate-float">📚</span>
               </div>
-              <h2 className={`text-5xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+              <h2 className={`text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                 Find Your Study Partner
               </h2>
-              <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              <p className={`text-base sm:text-xl mb-6 sm:mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'} px-4`}>
                 Connect via video with fellow students for focused study sessions
               </p>
               
               {/* Session Counter */}
               {sessionCount > 0 && (
                 <div className="mb-6">
-                  <span className={`inline-flex items-center px-4 py-2 rounded-full ${isDarkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
+                  <span className={`inline-flex items-center px-4 py-2 rounded-full text-sm sm:text-base ${isDarkMode ? 'bg-indigo-900/80 text-indigo-200' : 'bg-indigo-100 text-indigo-800'} backdrop-blur`}>
                     🔥 You completed {sessionCount} session{sessionCount !== 1 ? 's' : ''} today!
                   </span>
                 </div>
               )}
               
-              {/* Timer Duration Selector */}
-              <div className="mb-8">
+              {/* Timer Duration Selector - Mobile optimized */}
+              <div className="mb-8 px-4">
                 <p className={`mb-3 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>Select study duration:</p>
-                <div className="flex justify-center gap-3">
-                  {[25, 45, 60].map((duration) => (
+                <div className="flex justify-center gap-2 sm:gap-3">
+                  {[25, 45, 60].map((duration, idx) => (
                     <button
                       key={duration}
                       onClick={() => setSelectedDuration(duration)}
-                      className={`px-6 py-3 rounded-full font-semibold transition-all ${
+                      className={`px-5 py-3 sm:px-6 sm:py-3 rounded-full font-semibold text-base sm:text-lg transition-all duration-300 ${
                         selectedDuration === duration
-                          ? 'bg-indigo-500 text-white scale-110 shadow-lg'
-                          : `${isDarkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow`
-                      }`}
+                          ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white scale-105 shadow-lg shadow-indigo-500/30'
+                          : `${isDarkMode ? 'bg-slate-700/80 text-slate-300 hover:bg-slate-600' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow`
+                      } active:scale-95`}
+                      style={{ animationDelay: `${idx * 0.1}s` }}
                     >
                       {duration} min
                     </button>
@@ -589,36 +592,36 @@ export default function StudyBuddyConnect() {
               
               <button
                 onClick={findPartner}
-                className="px-12 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xl font-semibold rounded-full shadow-xl hover:from-indigo-600 hover:to-purple-600 hover:scale-105 transition-all duration-300"
+                className="px-8 py-4 sm:px-12 sm:py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white text-lg sm:text-xl font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 animate-glow"
               >
                 Find a Study Partner
               </button>
-              <p className={`mt-4 text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+              <p className={`mt-4 text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'} px-4`}>
                 🔒 100% Private • No Login Required • Video Sessions • P2P Connection
               </p>
             </div>
           )}
 
-          {/* Searching View */}
+          {/* Searching View - Mobile optimized */}
           {currentView === "searching" && (
-            <div className="text-center py-20">
-              <div className="mb-8">
-                <div className="inline-block text-8xl animate-pulse">🔍</div>
+            <div className="text-center py-12 sm:py-20">
+              <div className="mb-6 sm:mb-8">
+                <div className="inline-block text-5xl sm:text-8xl animate-pulse">🔍</div>
               </div>
-              <h2 className={`text-4xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+              <h2 className={`text-2xl sm:text-4xl font-bold mb-3 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                 {searchStatus}
               </h2>
-              <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              <p className={`text-base sm:text-xl mb-6 sm:mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                 Using decentralized P2P network for connection
               </p>
-              <div className="flex justify-center items-center gap-2 mb-8">
+              <div className="flex justify-center items-center gap-2 mb-6 sm:mb-8">
                 <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce"></div>
                 <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
                 <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
               <button
                 onClick={endSession}
-                className="px-8 py-3 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-colors"
+                className="px-6 py-3 sm:px-8 sm:py-3 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 active:scale-95 transition-all text-base sm:text-lg"
               >
                 Cancel
               </button>
@@ -627,165 +630,165 @@ export default function StudyBuddyConnect() {
 
           {/* Session View */}
           {currentView === "session" && (
-            <div className="space-y-4">
-              {/* Session Header */}
-              <div className={`flex justify-between items-center p-4 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
-                <div className="flex items-center gap-4">
-                  <span className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+            <div className="space-y-3 sm:space-y-4 animate-fade-in">
+              {/* Session Header - Mobile optimized */}
+              <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-slate-800/90' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+                <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
+                  <span className={`text-base sm:text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                     {isBotSession ? "🤖 Practice Session" : "🎓 Study Session"}
                   </span>
-                  <span className={`px-3 py-1 rounded-full text-sm ${isPeerConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                  <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm ${isPeerConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {isPeerConnected ? "Connected" : "Connecting..."}
                   </span>
                 </div>
-                <div className="flex items-center gap-4">
-                  <span className={`text-xl font-mono ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
+                  <span className={`text-lg sm:text-xl font-mono font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                     ⏱️ {formatTime(timeRemaining)}
                   </span>
                   <button
                     onClick={endSession}
-                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                    className="px-4 py-2 sm:px-4 sm:py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-95 transition-all text-sm sm:text-base"
                   >
-                    End Session
+                    End
                   </button>
                 </div>
               </div>
 
-              {/* Video Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Remote Video - Always render video element, handle srcObject via ref */}
-                <div className={`relative rounded-xl overflow-hidden shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-gray-900'}`}>
+              {/* Video Grid - Mobile optimized (stacked on mobile, side by side on desktop) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                {/* Remote Video */}
+                <div className={`relative rounded-xl overflow-hidden shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-gray-900'} aspect-video sm:aspect-video`}>
                   <video
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
-                    className="w-full aspect-video object-cover"
+                    className="w-full h-full object-cover"
                   />
                   {!isPeerConnected && (
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="text-center">
-                        <div className="text-6xl mb-4 animate-pulse">👤</div>
-                        <p className={`text-lg ${isDarkMode ? 'text-slate-400' : 'text-gray-400'}`}>
+                        <div className="text-5xl sm:text-6xl mb-3 sm:mb-4 animate-pulse">👤</div>
+                        <p className={`text-sm sm:text-lg ${isDarkMode ? 'text-slate-400' : 'text-gray-400'}`}>
                           {isBotSession ? "Your practice session" : "Waiting for partner..."}
                         </p>
                       </div>
                     </div>
                   )}
-                  <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/50 text-white rounded-lg text-sm">
+                  <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 px-2 sm:px-3 py-1 bg-black/50 text-white rounded-lg text-xs sm:text-sm">
                     {isBotSession ? "You (Practice)" : "Partner"}
                   </div>
                 </div>
 
                 {/* Local Video */}
-                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-gray-900">
+                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-gray-900 aspect-video sm:aspect-video">
                   <video
                     ref={localVideoRef}
                     autoPlay
                     playsInline
                     muted
-                    className="w-full aspect-video object-cover"
+                    className="w-full h-full object-cover mirror"
                   />
-                  <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/50 text-white rounded-lg text-sm">
+                  <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 px-2 sm:px-3 py-1 bg-black/50 text-white rounded-lg text-xs sm:text-sm">
                     You
                   </div>
                   {isCameraMuted && (
-                    <div className="absolute top-4 right-4 p-2 bg-red-500 rounded-full">
-                      <span className="text-white">📷</span>
+                    <div className="absolute top-2 sm:top-4 right-2 sm:right-4 p-2 bg-red-500 rounded-full animate-pulse">
+                      <span className="text-white text-sm">📷</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Controls */}
-              <div className={`flex justify-center items-center gap-4 p-4 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+              {/* Controls - Mobile optimized with larger touch targets */}
+              <div className={`flex flex-wrap justify-center items-center gap-2 sm:gap-4 p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-slate-800/90' : 'bg-white/80'} backdrop-blur shadow-lg`}>
                 {/* Study Mode Toggle */}
                 <button
                   onClick={() => handleStudyModeChange(studyMode === "normal" ? "silent" : "normal")}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                  className={`px-4 py-3 sm:px-4 sm:py-2 rounded-full text-sm font-semibold transition-all duration-200 active:scale-95 ${
                     studyMode === "silent" 
-                      ? 'bg-purple-500 text-white' 
-                      : `${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`
+                      ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
+                      : `${isDarkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`
                   }`}
                   title={studyMode === "silent" ? "Silent Mode (mic muted)" : "Normal Mode"}
                 >
                   {studyMode === "silent" ? '🤫 Silent' : '🔊 Normal'}
                 </button>
                 
-                {/* Mic */}
+                {/* Mic - Larger button for mobile */}
                 <button
                   onClick={toggleMic}
-                  className={`p-4 rounded-full transition-colors ${isMicMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  className={`p-4 sm:p-3 rounded-full transition-all duration-200 active:scale-90 ${isMicMuted ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                   title={isMicMuted ? "Unmute" : "Mute"}
                 >
-                  {isMicMuted ? "🔇" : "🎤"}
+                  <span className="text-xl sm:text-lg">{isMicMuted ? "🔇" : "🎤"}</span>
                 </button>
                 
                 {/* Camera */}
                 <button
                   onClick={toggleCamera}
-                  className={`p-4 rounded-full transition-colors ${isCameraMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  className={`p-4 sm:p-3 rounded-full transition-all duration-200 active:scale-90 ${isCameraMuted ? 'bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/30' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                   title={isCameraMuted ? "Turn on camera" : "Turn off camera"}
                 >
-                  {isCameraMuted ? "📷" : "📹"}
+                  <span className="text-xl sm:text-lg">{isCameraMuted ? "📷" : "📹"}</span>
                 </button>
                 
                 {/* Music */}
                 <button
                   onClick={toggleMusic}
-                  className={`p-4 rounded-full transition-colors ${isPlayingMusic ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  className={`p-4 sm:p-3 rounded-full transition-all duration-200 active:scale-90 ${isPlayingMusic ? 'bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 shadow-lg shadow-indigo-500/30' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                   title={isPlayingMusic ? "Stop music" : "Play lo-fi music"}
                 >
-                  {isPlayingMusic ? "🎵" : "🎧"}
+                  <span className="text-xl sm:text-lg">{isPlayingMusic ? "🎵" : "🎧"}</span>
                 </button>
                 
                 {/* Pause */}
                 <button
                   onClick={togglePause}
-                  className={`p-4 rounded-full transition-colors ${isPaused ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  className={`p-4 sm:p-3 rounded-full transition-all duration-200 active:scale-90 ${isPaused ? 'bg-yellow-500 hover:bg-yellow-600 shadow-lg shadow-yellow-500/30' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
                   title={isPaused ? "Resume" : "Pause"}
                 >
-                  {isPaused ? "▶️" : "⏸️"}
+                  <span className="text-xl sm:text-lg">{isPaused ? "▶️" : "⏸️"}</span>
                 </button>
                 
                 {/* End Call */}
                 <button
                   onClick={endSession}
-                  className="p-4 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  className="p-4 sm:p-3 rounded-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white transition-all duration-200 active:scale-90 shadow-lg shadow-red-500/30"
                   title="End session"
                 >
-                  📞
+                  <span className="text-xl sm:text-lg">📞</span>
                 </button>
               </div>
 
               {/* Icebreaker Message */}
               {showIcebreaker && !isBotSession && (
-                <div className={`text-center p-4 rounded-lg ${isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-50'} animate-pulse`}>
-                  <p className={`text-lg font-semibold ${isDarkMode ? 'text-indigo-200' : 'text-indigo-800'}`}>
+                <div className={`text-center p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-50'} animate-pulse backdrop-blur`}>
+                  <p className={`text-sm sm:text-lg font-semibold ${isDarkMode ? 'text-indigo-200' : 'text-indigo-800'}`}>
                     👋 Say hi to your study partner!
                   </p>
                   <button
                     onClick={() => setShowIcebreaker(false)}
-                    className={`mt-2 text-sm ${isDarkMode ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
+                    className={`mt-2 text-xs sm:text-sm ${isDarkMode ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
                   >
                     Dismiss
                   </button>
                 </div>
               )}
 
-              {/* Chat */}
-              <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
-                <h3 className={`text-lg font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+              {/* Chat - Mobile optimized */}
+              <div className={`rounded-xl p-3 sm:p-4 ${isDarkMode ? 'bg-slate-800/90' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+                <h3 className={`text-base sm:text-lg font-semibold mb-2 sm:mb-3 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                   💬 Chat
                 </h3>
-                <div className={`h-48 overflow-y-auto mb-3 p-3 rounded-lg ${isDarkMode ? 'bg-slate-700' : 'bg-gray-100'}`}>
+                <div className={`h-40 sm:h-48 overflow-y-auto mb-3 p-3 rounded-lg ${isDarkMode ? 'bg-slate-700' : 'bg-gray-100'}`}>
                   {chatMessages.length === 0 ? (
                     <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
                       No messages yet. Start the conversation!
                     </p>
                   ) : (
                     chatMessages.map((msg, idx) => (
-                      <div key={idx} className={`mb-2 ${msg.sender === "You" ? 'text-right' : 'text-left'}`}>
-                        <span className={`inline-block px-3 py-1 rounded-lg ${msg.sender === "You" ? 'bg-indigo-500 text-white' : isDarkMode ? 'bg-slate-600 text-white' : 'bg-gray-200 text-gray-800'}`}>
+                      <div key={idx} className={`mb-2 ${msg.sender === "You" ? 'text-right' : 'text-left'} animate-slide-up`} style={{ animationDelay: `${idx * 0.05}s` }}>
+                        <span className={`inline-block px-3 py-2 rounded-lg ${msg.sender === "You" ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : isDarkMode ? 'bg-slate-600 text-white' : 'bg-gray-200 text-gray-800'}`}>
                           <span className="text-xs opacity-70 block">{msg.sender}</span>
                           {msg.text}
                         </span>
@@ -800,11 +803,11 @@ export default function StudyBuddyConnect() {
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && sendChatMessage()}
                     placeholder="Type a message..."
-                    className={`flex-1 px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-800'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                    className={`flex-1 px-4 py-3 sm:py-2 rounded-lg border text-base sm:text-sm ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white placeholder-slate-400' : 'bg-white border-gray-300 text-gray-800 placeholder-gray-500'} focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50 transition-all`}
                   />
                   <button
                     onClick={sendChatMessage}
-                    className="px-6 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    className="px-5 py-3 sm:px-6 sm:py-2 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 active:scale-95 transition-all text-base sm:text-sm font-semibold"
                   >
                     Send
                   </button>
@@ -813,24 +816,24 @@ export default function StudyBuddyConnect() {
             </div>
           )}
 
-          {/* Completion Modal */}
+          {/* Completion Modal - Mobile optimized */}
           {showCompletionModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className={`p-8 rounded-xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-2xl text-center`}>
-                <div className="text-6xl mb-4">🎉</div>
-                <h2 className={`text-3xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+              <div className={`p-6 sm:p-8 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-2xl text-center animate-scale-in max-w-sm w-full`}>
+                <div className="text-5xl sm:text-6xl mb-4 animate-bounce-subtle">🎉</div>
+                <h2 className={`text-2xl sm:text-3xl font-bold mb-3 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                   Session Complete!
                 </h2>
-                <p className={`text-lg mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                <p className={`text-base sm:text-lg mb-5 sm:mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                   Great study session! Would you like to find another partner?
                 </p>
-                <div className="flex gap-4 justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button
                     onClick={() => {
                       setShowCompletionModal(false);
                       findPartner();
                     }}
-                    className="px-6 py-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    className="px-6 py-3 sm:px-6 sm:py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 active:scale-95 transition-all font-semibold text-base"
                   >
                     Find New Partner
                   </button>
@@ -839,7 +842,7 @@ export default function StudyBuddyConnect() {
                       setShowCompletionModal(false);
                       setCurrentView("landing");
                     }}
-                    className={`px-6 py-3 rounded-lg transition-colors ${isDarkMode ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                    className={`px-6 py-3 sm:px-6 sm:py-3 rounded-xl transition-all duration-200 active:scale-95 ${isDarkMode ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'} font-semibold text-base`}
                   >
                     Go to Home
                   </button>
