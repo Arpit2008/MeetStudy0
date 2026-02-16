@@ -56,6 +56,8 @@ export default function StudyBuddyConnect() {
   const [hasLocalStream, setHasLocalStream] = useState(false);
   const [isPeerConnected, setIsPeerConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isConnected, setIsConnected] = useState(false);
   
   // Refs
   const socketRef = useRef<Socket | null>(null);
@@ -89,52 +91,85 @@ export default function StudyBuddyConnect() {
 
   // Initialize Socket.io - simplified and more reliable
   const initSocket = useCallback(() => {
-    if (!socketRef.current) {
-      // Get the current server URL - use localhost in development
-      const serverUrl = typeof window !== 'undefined' 
-        ? (window.location.origin || 'http://localhost:3000') 
-        : 'http://localhost:3000';
-      
-      console.log("🔌 Connecting to socket server:", serverUrl);
-      
-      socketRef.current = io(serverUrl, {
-        reconnection: true,
-        reconnectionAttempts: 5,
-        reconnectionDelay: 2000,
-        timeout: 15000,
-        transports: ['websocket', 'polling'],
-      });
-
-      socketRef.current.on("connect", () => {
-        console.log("✅ Connected to server! Socket ID:", socketRef.current?.id);
-      });
-
-      socketRef.current.on("connect_error", (error) => {
-        console.error("❌ Connection error:", error.message);
-        setConnectionError("Could not connect to server. Please refresh and try again.");
-      });
-
-      socketRef.current.on("disconnect", (reason) => {
-        console.log("Disconnected:", reason);
-      });
-
-      socketRef.current.on("reconnect", (attempt) => {
-        console.log("Reconnected after", attempt, "attempts");
-      });
+    if (socketRef.current?.connected) {
+      console.log("Socket already connected:", socketRef.current.id);
+      setIsConnecting(false);
+      return socketRef.current;
     }
+    
+    // Disconnect existing socket if not connected
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+    }
+    
+    // Use explicit localhost URL for development
+    const serverUrl = 'http://localhost:3000';
+    
+    console.log("🔌 Connecting to socket server:", serverUrl);
+    setIsConnecting(true);
+    
+    socketRef.current = io(serverUrl, {
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+      timeout: 20000,
+      transports: ['websocket', 'polling'],
+      forceNew: true,
+    });
+
+    socketRef.current.on("connect", () => {
+      console.log("✅ Connected to server! Socket ID:", socketRef.current?.id);
+      setConnectionError(null);
+      setIsConnecting(false);
+      setIsConnected(true);
+    });
+
+    socketRef.current.on("connect_error", (error) => {
+      console.error("❌ Connection error:", error.message);
+      setConnectionError("Could not connect to server. Please refresh and try again.");
+      setIsConnecting(false);
+      setIsConnected(false);
+    });
+
+    socketRef.current.on("disconnect", (reason) => {
+      console.log("Disconnected:", reason);
+      setIsConnected(false);
+      if (reason === 'io server disconnect') {
+        // Server disconnected, reconnect manually
+        socketRef.current?.connect();
+      }
+    });
+
+    socketRef.current.on("reconnect", (attempt) => {
+      console.log("Reconnected after", attempt, "attempts");
+      setConnectionError(null);
+      setIsConnecting(false);
+      setIsConnected(true);
+    });
+
+    socketRef.current.on("reconnect_failed", () => {
+      setConnectionError("Could not connect to server. Please refresh and try again.");
+      setIsConnecting(false);
+      setIsConnected(false);
+    });
+    
     return socketRef.current;
   }, []);
 
   // Wait for socket to be ready before emitting events
-  const waitForSocket = useCallback((socket: Socket, callback: () => void, maxWait = 10000) => {
-    if (socket.connected) {
+  const waitForSocket = useCallback((socket: Socket, callback: () => void, maxWait = 15000) => {
+    if (socket.connected && socket.id) {
+      console.log("Socket already connected:", socket.id);
       callback();
       return;
     }
     
+    console.log("Waiting for socket connection...");
     const startTime = Date.now();
     const checkConnection = () => {
-      if (socket.connected) {
+      if (socket.connected && socket.id) {
+        console.log("Socket connected after wait:", socket.id);
         callback();
         return;
       }
@@ -146,7 +181,7 @@ export default function StudyBuddyConnect() {
         return;
       }
       
-      setTimeout(checkConnection, 100);
+      setTimeout(checkConnection, 200);
     };
     
     checkConnection();
@@ -312,6 +347,28 @@ export default function StudyBuddyConnect() {
     setChatMessages([]);
   }, [sessionData?.sessionId]);
 
+  // Auto-connect socket on page load
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    const socket = initSocket();
+    
+    // If already connected, we're good
+    if (socket.connected) {
+      return;
+    }
+    
+    // Otherwise wait for connection
+    const checkConnection = () => {
+      if (socket.connected) {
+        return;
+      }
+      setTimeout(checkConnection, 500);
+    };
+    
+    // Give it a moment then start checking
+    setTimeout(checkConnection, 1000);
+  }, [initSocket]);
+
   // Set up endSession ref
   useEffect(() => {
     endSessionRef.current = endSession;
@@ -319,6 +376,7 @@ export default function StudyBuddyConnect() {
 
   // Set up socket event listeners
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     const socket = initSocket();
     
     socket.on("waiting", (data: { position: number }) => {
@@ -412,7 +470,7 @@ export default function StudyBuddyConnect() {
       const socketId = socket.id || `temp-${Date.now()}`;
       console.log("🔍 Joining queue with socket ID:", socketId);
       socket.emit("join-queue", { id: socketId });
-    });
+    }, 20000); // Increase timeout to 20 seconds
   }, [initSocket, waitForSocket]);
 
   // Toggle camera
@@ -485,6 +543,26 @@ export default function StudyBuddyConnect() {
           {/* Landing View */}
           {currentView === "landing" && (
             <div className="text-center py-20">
+              {/* Connection Status */}
+              <div className="mb-6">
+                {isConnecting ? (
+                  <span className="inline-flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full">
+                    <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
+                    Connecting to server...
+                  </span>
+                ) : isConnected ? (
+                  <span className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full">
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                    Connected
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-4 py-2 bg-red-100 text-red-800 rounded-full">
+                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                    Not connected - Click button to connect
+                  </span>
+                )}
+              </div>
+              
               <div className="mb-8">
                 <span className="text-8xl">📚</span>
               </div>

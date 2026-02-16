@@ -19,17 +19,20 @@ app.prepare().then(() => {
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
-      methods: ["GET", "POST"]
+      methods: ["GET", "POST"],
+      credentials: false
     },
     pingTimeout: 60000,
-    pingInterval: 25000
+    pingInterval: 25000,
+    transports: ['websocket', 'polling'],
+    allowUpgrades: true
   });
 
   console.log("🚀 Socket.io server starting...");
 
   // Socket.io signaling server
   io.on('connection', (socket) => {
-    console.log('✅ User connected:', socket.id);
+    console.log('✅ User connected:', socket.id, '| Total sockets:', io.engine.clientsCount);
 
     // User joins waiting queue
     socket.on('join-queue', (userData) => {
@@ -121,12 +124,12 @@ app.prepare().then(() => {
     });
 
     // Disconnect handling
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
       // Remove from waiting queue
       const index = waitingUsers.findIndex(w => w.id === socket.id);
       if (index > -1) {
         waitingUsers.splice(index, 1);
-        console.log(`User ${socket.id} removed from queue (disconnected)`);
+        console.log(`User ${socket.id} removed from queue (disconnected: ${reason})`);
       }
 
       // End any active sessions
@@ -141,7 +144,7 @@ app.prepare().then(() => {
         }
       }
       
-      console.log('❌ User disconnected:', socket.id);
+      console.log('❌ User disconnected:', socket.id, '| Reason:', reason, '| Total sockets:', io.engine.clientsCount);
     });
   });
 
