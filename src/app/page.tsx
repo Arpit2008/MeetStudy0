@@ -94,8 +94,12 @@ export default function StudyBuddyConnect() {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const botTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // State to track streams for useEffect
+  const [localStreamForVideo, setLocalStreamForVideo] = useState<MediaStream | null>(null);
+  const [remoteStreamForVideo, setRemoteStreamForVideo] = useState<MediaStream | null>(null);
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isBotSession, setIsBotSession] = useState(false);
@@ -193,6 +197,22 @@ export default function StudyBuddyConnect() {
   useEffect(() => {
     endSessionRef.current = endSession;
   }, [endSession]);
+
+  // Handle local stream → local video
+  useEffect(() => {
+    if (localStreamForVideo && localVideoRef.current) {
+      console.log("🎥 Setting local video srcObject");
+      localVideoRef.current.srcObject = localStreamForVideo;
+    }
+  }, [localStreamForVideo]);
+
+  // Handle remote stream → remote video
+  useEffect(() => {
+    if (remoteStreamForVideo && remoteVideoRef.current) {
+      console.log("🎥 Setting remote video srcObject");
+      remoteVideoRef.current.srcObject = remoteStreamForVideo;
+    }
+  }, [remoteStreamForVideo]);
 
   // Timer
   useEffect(() => {
@@ -333,9 +353,15 @@ export default function StudyBuddyConnect() {
         console.log("📹 Received stream from peer:", peerId);
         console.log("Stream tracks:", stream.getTracks().length);
         
+        // Store the remote stream
+        remoteStreamRef.current = stream;
+        setRemoteStreamForVideo(stream);
+        
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = stream;
-          console.log("📹 Remote video srcObject set");
+          console.log("📹 Remote video srcObject set directly");
+        } else {
+          console.log("📹 Remote video ref not ready, will use effect");
         }
         setIsPeerConnected(true);
         setCurrentView("session");
@@ -363,12 +389,12 @@ export default function StudyBuddyConnect() {
       // Try to get local media and add stream to room
       navigator.mediaDevices.getUserMedia({ video: true, audio: true })
         .then((stream) => {
+          console.log("🎥 Got local media stream, tracks:", stream.getTracks().length);
           localStreamRef.current = stream;
+          setLocalStreamForVideo(stream); // Trigger useEffect to set video
           setHasLocalStream(true);
           
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
+          // Video will be set by useEffect
           
           // Add stream to room (automatically shares with peers)
           room.addStream(stream);
@@ -506,17 +532,16 @@ export default function StudyBuddyConnect() {
 
               {/* Video Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Remote Video */}
+                {/* Remote Video - Always render video element, handle srcObject via ref */}
                 <div className={`relative rounded-xl overflow-hidden shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-gray-900'}`}>
-                  {isPeerConnected ? (
-                    <video
-                      ref={remoteVideoRef}
-                      autoPlay
-                      playsInline
-                      className="w-full aspect-video object-cover"
-                    />
-                  ) : (
-                    <div className="w-full aspect-video flex items-center justify-center">
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full aspect-video object-cover"
+                  />
+                  {!isPeerConnected && (
+                    <div className="absolute inset-0 flex items-center justify-center">
                       <div className="text-center">
                         <div className="text-6xl mb-4 animate-pulse">👤</div>
                         <p className={`text-lg ${isDarkMode ? 'text-slate-400' : 'text-gray-400'}`}>
