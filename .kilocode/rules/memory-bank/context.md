@@ -43,6 +43,9 @@
 - [x] **Fix**: Increased bot fallback delay from 3s to 5s to give real users more time to join
 - [x] **Fix**: Changed matching interval from 1s to 500ms for more aggressive matching
 - [x] **Fix**: Improved client-side connection timeout handling and error messages
+- [x] **Fix**: Fixed "Could not connect to server" error - completely rewrote socket connection logic for more reliability
+- [x] **Fix**: Simplified client (page.tsx) with more robust socket initialization and explicit wait for connection
+- [x] **Fix**: Simplified server.js with cleaner matching logic
 
 ## Current Structure
 
