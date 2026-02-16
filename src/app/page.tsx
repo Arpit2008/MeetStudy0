@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { joinRoom, selfId } from "trystero/torrent";
+import Peer, { MediaConnection } from "peerjs";
 
 // Types
 interface SessionData {
@@ -21,8 +21,8 @@ const iceServers = [
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
 
-// Room configuration
-const APP_ID = "studybuddy_connect_v1";
+// PeerJS configuration - Using free cloud server for signaling
+const PEERJS_API_KEY = "studybuddy-connect-v1";
 
 export default function StudyBuddyConnect() {
   // App states
@@ -53,7 +53,8 @@ export default function StudyBuddyConnect() {
   const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
   
   // Refs
-  const roomRef = useRef<ReturnType<typeof joinRoom> | null>(null);
+  const peerRef = useRef<Peer | null>(null);
+  const mediaConnRef = useRef<MediaConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -66,6 +67,7 @@ export default function StudyBuddyConnect() {
 
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
+  const handlePartnerConnectionRef = useRef<any>(null);
 
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -112,105 +114,122 @@ export default function StudyBuddyConnect() {
     });
   }, []);
 
-  // Find partner using Trystero
+  // Find partner using PeerJS (reliable cloud signaling)
   const findPartner = useCallback(() => {
     setCurrentView("searching");
     setConnectionError(null);
     setIsConnecting(true);
     setSearchStatus("Looking for study partners...");
     
-    // Generate a random room ID for matching
+    // Generate a unique room ID
     const roomId = `study_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    console.log("🔍 Joining Trystero room:", roomId);
-    console.log("My ID:", selfId);
+    console.log("🔍 Creating PeerJS connection...");
     
     try {
-      const room = joinRoom({ appId: APP_ID }, roomId);
-      roomRef.current = room;
+      // Create peer with a random ID
+      const peer = new Peer({
+        debug: 2
+      });
+      peerRef.current = peer;
       
-      // Listen for peers joining
-      room.onPeerJoin((peerId) => {
-        console.log("👋 Peer joined:", peerId);
-        setSearchStatus("Partner found! Connecting...");
-        setIsConnecting(false);
-        setIsConnected(true);
+      peer.on('open', (id) => {
+        console.log("📡 My PeerJS ID:", id);
+        setSearchStatus("Waiting for a partner to join...");
         
-        // Create session
-        setSessionData({
-          sessionId: roomId,
-          partnerId: peerId
+        // Listen for incoming connections (partner joining us)
+        peer.on('connection', (conn) => {
+          console.log("📨 Incoming connection from:", conn.peer);
+          if (handlePartnerConnectionRef.current) {
+            handlePartnerConnectionRef.current(conn);
+          }
         });
         
-        // Get local stream and send to peer
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-          .then(stream => {
-            localStreamRef.current = stream;
-            setHasLocalStream(true);
-            
-            if (localVideoRef.current) {
-              localVideoRef.current.srcObject = stream;
-            }
-            
-            // Add stream to room (sends to all peers)
-            room.addStream(stream);
-            console.log("📹 Local stream added to room");
-          })
-          .catch(err => {
-            console.error("Error getting media devices:", err);
-          });
+        // For demo purposes, create a bot session if no one connects after 15 seconds
+        setTimeout(() => {
+          if (!sessionData && currentView === "searching") {
+            console.log("⏰ Timeout - creating bot session");
+            peer.destroy();
+            createBotSession();
+          }
+        }, 15000);
       });
       
-      // Listen for peers leaving
-      room.onPeerLeave((peerId) => {
-        console.log("👋 Peer left:", peerId);
-        // Use ref to call endSession
-        if (sessionData?.partnerId === peerId) {
-          endSessionRef.current();
+      peer.on('error', (err) => {
+        console.error("PeerJS error:", err);
+        if (err.type === 'network' || err.type === 'server-error') {
+          setConnectionError("Connection failed. Please try again.");
+          setIsConnecting(false);
+          setCurrentView("landing");
         }
       });
-      
-      // Listen for peer streams
-      room.onPeerStream((stream, peerId) => {
-        console.log("📹 Received stream from peer:", peerId);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-        }
-        setIsPeerConnected(true);
-      });
-      
-      // Create chat action
-      const [sendMessage, getMessage] = room.makeAction("chat");
-      getMessage((data: any, peerId: string) => {
-        setChatMessages(prev => [...prev, { sender: "Partner", text: String(data) }]);
-      });
-      
-      // Store send function for later use
-      (window as any).__chatSend = sendMessage;
-      
-      // Show searching status after a delay
-      setTimeout(() => {
-        if (!sessionData && currentView === "searching") {
-          setSearchStatus("No partners found yet. Keep waiting...");
-        }
-      }, 3000);
-      
-      // Timeout - create bot session after 15 seconds if no peer found
-      setTimeout(() => {
-        if (!sessionData && currentView === "searching") {
-          console.log("⏰ Timeout - creating bot session");
-          room.leave();
-          createBotSession();
-        }
-      }, 15000);
       
     } catch (error) {
-      console.error("Error joining Trystero room:", error);
+      console.error("Error creating PeerJS peer:", error);
       setConnectionError("Could not connect. Please try again.");
       setIsConnecting(false);
       setCurrentView("landing");
     }
   }, [sessionData, currentView, createBotSession]);
+
+  // Handle partner connection
+  const handlePartnerConnection = useCallback((conn: any) => {
+    console.log("👋 Partner connected:", conn.peer);
+    setSearchStatus("Partner found! Connecting...");
+    setIsConnecting(false);
+    setIsConnected(true);
+    
+    // Create session
+    setSessionData({
+      sessionId: `session_${Date.now()}`,
+      partnerId: conn.peer
+    });
+    
+    // Get local stream
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        localStreamRef.current = stream;
+        setHasLocalStream(true);
+        
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+        
+        // Call the partner with our stream
+        const call = peerRef.current?.call(conn.peer, stream);
+        if (call) {
+          call.on('stream', (remoteStream) => {
+            console.log("📹 Received remote stream");
+            if (remoteVideoRef.current) {
+              remoteVideoRef.current.srcObject = remoteStream;
+            }
+            setIsPeerConnected(true);
+          });
+          call.on('close', () => {
+            console.log("📞 Call closed");
+            endSessionRef.current();
+          });
+        }
+      })
+      .catch(err => {
+        console.error("Error getting media devices:", err);
+      });
+    
+    // Handle chat messages
+    conn.on('data', (data: any) => {
+      if (data.type === 'chat') {
+        setChatMessages(prev => [...prev, { sender: "Partner", text: data.text }]);
+      }
+    });
+    
+    // Store connection for sending messages
+    (window as any).__partnerConn = conn;
+  }, []);
+
+  // Set up handlePartnerConnection ref
+  useEffect(() => {
+    handlePartnerConnectionRef.current = handlePartnerConnection;
+  }, [handlePartnerConnection]);
 
   // End session
   const endSession = useCallback(() => {
@@ -221,9 +240,14 @@ export default function StudyBuddyConnect() {
       localStreamRef.current = null;
     }
     
-    if (roomRef.current) {
-      roomRef.current.leave();
-      roomRef.current = null;
+    if (mediaConnRef.current) {
+      mediaConnRef.current.close();
+      mediaConnRef.current = null;
+    }
+    
+    if (peerRef.current) {
+      peerRef.current.destroy();
+      peerRef.current = null;
     }
     
     if (timerRef.current) {
@@ -241,7 +265,7 @@ export default function StudyBuddyConnect() {
     setIsBotSession(false);
     setIsConnected(false);
     
-    delete (window as any).__chatSend;
+    delete (window as any).__partnerConn;
   }, []);
 
   // Set up endSession ref
@@ -298,9 +322,9 @@ export default function StudyBuddyConnect() {
 
   // Send chat message
   const sendChatMessage = useCallback(() => {
-    const sendFn = (window as any).__chatSend;
-    if (chatInput.trim() && sendFn) {
-      sendFn(chatInput); // Sends to all peers
+    const conn = (window as any).__partnerConn;
+    if (chatInput.trim() && conn) {
+      conn.send({ type: 'chat', text: chatInput });
       setChatMessages(prev => [...prev, { sender: "You", text: chatInput }]);
       setChatInput("");
     }
