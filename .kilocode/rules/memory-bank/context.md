@@ -9,10 +9,13 @@
 - [x] Switched from PartyKit to Trystero for P2P WebRTC connections
 - [x] Trystero uses BitTorrent/IPFS/Nostr for signaling - no server needed
 - [x] Works in production because it doesn't require a persistent server
-- [x] Bot fallback after 10 seconds if no peers are found
+- [x] Bot fallback after 10 seconds if no peers are found (extended to 30 seconds)
 - [x] Video/audio streaming via Trystero's addStream/onPeerStream APIs
 - [x] Chat via Trystero's makeAction API
 - [x] Removed PartyKit dependency (required server deployment)
+- [x] Fixed React hydration error #418 (client-side dark mode init with useEffect)
+- [x] Improved Trystero trackers (using IPFS trackers instead of Nostr relays)
+- [x] Added self-ID filtering to avoid connecting to self
 
 ## Architecture Change
 
