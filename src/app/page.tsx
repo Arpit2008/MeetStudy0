@@ -102,11 +102,9 @@ export default function StudyBuddyConnect() {
       socketRef.current.disconnect();
     }
     
-    // Use relative URL - works both locally and deployed
-    // For deployed apps, this connects to the same server serving the page
-    const serverUrl = typeof window !== 'undefined' && window.location.hostname === 'localhost' 
-      ? 'http://localhost:3000' 
-      : '';
+    // Use current origin for socket connection - works both locally and deployed
+    // Socket.io is served from the same server as the app
+    const serverUrl = typeof window !== 'undefined' ? window.location.origin : '';
     
     console.log("🔌 Connecting to socket server:", serverUrl || "(same origin)");
     setIsConnecting(true);
