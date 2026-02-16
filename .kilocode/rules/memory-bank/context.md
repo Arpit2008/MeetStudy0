@@ -16,6 +16,7 @@
 - [x] Fixed React hydration error #418 (client-side dark mode init with useEffect)
 - [x] Improved Trystero trackers (using IPFS trackers instead of Nostr relays)
 - [x] Added self-ID filtering to avoid connecting to self
+- [x] Fixed client-side exception - Trystero SSR error (dynamic import on client only)
 
 ## Architecture Change
 
