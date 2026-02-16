@@ -60,15 +60,31 @@ export default function StudyBuddyConnect() {
   // App states
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [selectedDuration, setSelectedDuration] = useState(25); // Default 25 minutes
+  const [studyMode, setStudyMode] = useState<"normal" | "silent">("normal");
+  const [isPlayingMusic, setIsPlayingMusic] = useState(false);
+  const [sessionCount, setSessionCount] = useState(0);
+  const [showIcebreaker, setShowIcebreaker] = useState(false);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
   
 /* eslint-disable react-hooks/set-state-in-effect */
-  // Initialize dark mode from localStorage after mount
+  // Initialize dark mode and session count from localStorage after mount
   useEffect(() => {
     setMounted(true);
     const savedTheme = localStorage.getItem("studybuddy-theme");
     if (savedTheme === "dark") {
       document.documentElement.classList.add("dark");
       setIsDarkMode(true);
+    }
+    // Load session count
+    const today = new Date().toDateString();
+    const savedDate = localStorage.getItem("studybuddy-date");
+    const savedCount = localStorage.getItem("studybuddy-sessions");
+    if (savedDate === today && savedCount) {
+      setSessionCount(parseInt(savedCount, 10));
+    } else {
+      localStorage.setItem("studybuddy-date", today);
+      localStorage.setItem("studybuddy-sessions", "0");
     }
   }, []);
 /* eslint-enable react-hooks/set-state-in-effect */
@@ -127,9 +143,10 @@ export default function StudyBuddyConnect() {
     console.log("🤖 Creating bot session...");
     setIsBotSession(true);
     setCurrentView("session");
-    setTimeRemaining(30 * 60);
+    setTimeRemaining(selectedDuration * 60);
     setIsConnected(true);
     setIsConnecting(false);
+    setShowIcebreaker(true);
     
     // Get local stream and show it in both videos (simulating partner)
     navigator.mediaDevices.getUserMedia({
@@ -150,12 +167,29 @@ export default function StudyBuddyConnect() {
     }).catch(err => {
       console.error("Error getting local stream for bot:", err);
     });
-  }, []);
+  }, [selectedDuration]);
 
   // End session
   const endSession = useCallback(() => {
     console.log("Ending session");
     
+    // Stop music if playing
+    if (musicRef.current) {
+      musicRef.current.pause();
+      musicRef.current.currentTime = 0;
+      setIsPlayingMusic(false);
+    }
+    
+    // Increment session count
+    const today = new Date().toDateString();
+    const savedDate = localStorage.getItem("studybuddy-date");
+    const savedCount = localStorage.getItem("studybuddy-sessions");
+    
+    if (savedDate === today && savedCount) {
+      const newCount = parseInt(savedCount, 10) + 1;
+      localStorage.setItem("studybuddy-sessions", newCount.toString());
+      setSessionCount(newCount);
+    }
     // Clear bot timeout
     if (botTimeoutRef.current) {
       clearTimeout(botTimeoutRef.current);
@@ -191,6 +225,7 @@ export default function StudyBuddyConnect() {
     setChatMessages([]);
     setIsBotSession(false);
     setIsConnected(false);
+    setShowIcebreaker(false);
   }, []);
 
   // Set up refs for callbacks
@@ -259,6 +294,52 @@ export default function StudyBuddyConnect() {
   // Toggle pause
   const togglePause = useCallback(() => {
     setIsPaused(prev => !prev);
+  }, []);
+
+  // Toggle study music
+  const toggleMusic = useCallback(() => {
+    if (!musicRef.current) {
+      // Create audio element with a LoFi music URL (free to use)
+      musicRef.current = new Audio("https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3");
+      musicRef.current.loop = true;
+      musicRef.current.volume = 0.3;
+    }
+    
+    if (isPlayingMusic) {
+      musicRef.current.pause();
+    } else {
+      musicRef.current.play().catch(err => console.log("Music play error:", err));
+    }
+    setIsPlayingMusic(prev => !prev);
+  }, [isPlayingMusic]);
+
+  // Handle study mode change
+  const handleStudyModeChange = useCallback((mode: "normal" | "silent") => {
+    setStudyMode(mode);
+    if (mode === "silent" && localStreamRef.current) {
+      // Auto-mute mic in silent mode
+      const audioTrack = localStreamRef.current.getAudioTracks()[0];
+      if (audioTrack && audioTrack.enabled) {
+        audioTrack.enabled = false;
+        setIsMicMuted(true);
+      }
+    }
+  }, []);
+
+  // Share link
+  const shareLink = useCallback(() => {
+    const url = window.location.href;
+    if (navigator.share) {
+      navigator.share({
+        title: "StudyBuddy Connect",
+        text: "Join me for a focused study session!",
+        url: url,
+      });
+    } else {
+      navigator.clipboard.writeText(url).then(() => {
+        alert("Link copied to clipboard! Share with friends to study together.");
+      });
+    }
   }, []);
 
   // Send chat message
@@ -367,7 +448,8 @@ export default function StudyBuddyConnect() {
         setCurrentView("session");
         setIsConnected(true);
         setIsConnecting(false);
-        setTimeRemaining(30 * 60);
+        setTimeRemaining(selectedDuration * 60);
+        setShowIcebreaker(true);
       });
       
       // Set a timeout to start bot session if no peers found
@@ -411,7 +493,7 @@ export default function StudyBuddyConnect() {
       setIsConnecting(false);
       setCurrentView("landing");
     }
-  }, [createBotSession]);
+  }, [createBotSession, selectedDuration]);
 
   // Don't render content until mounted to avoid hydration mismatch
   if (!mounted) {
@@ -430,12 +512,21 @@ export default function StudyBuddyConnect() {
           <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
             StudyBuddy Connect 🎓
           </h1>
-          <button
-            onClick={toggleDarkMode}
-            className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-yellow-300' : 'bg-white text-indigo-600'} shadow-lg hover:scale-110 transition-transform`}
-          >
-            {isDarkMode ? '☀️' : '🌙'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={shareLink}
+              className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-white text-indigo-600 hover:bg-indigo-50'} shadow-lg hover:scale-110 transition-transform`}
+              title="Invite friends"
+            >
+              📤
+            </button>
+            <button
+              onClick={toggleDarkMode}
+              className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-yellow-300' : 'bg-white text-indigo-600'} shadow-lg hover:scale-110 transition-transform`}
+            >
+              {isDarkMode ? '☀️' : '🌙'}
+            </button>
+          </div>
         </header>
 
         {/* Main Content */}
@@ -466,6 +557,36 @@ export default function StudyBuddyConnect() {
               <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
                 Connect via video with fellow students for focused study sessions
               </p>
+              
+              {/* Session Counter */}
+              {sessionCount > 0 && (
+                <div className="mb-6">
+                  <span className={`inline-flex items-center px-4 py-2 rounded-full ${isDarkMode ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'}`}>
+                    🔥 You completed {sessionCount} session{sessionCount !== 1 ? 's' : ''} today!
+                  </span>
+                </div>
+              )}
+              
+              {/* Timer Duration Selector */}
+              <div className="mb-8">
+                <p className={`mb-3 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>Select study duration:</p>
+                <div className="flex justify-center gap-3">
+                  {[25, 45, 60].map((duration) => (
+                    <button
+                      key={duration}
+                      onClick={() => setSelectedDuration(duration)}
+                      className={`px-6 py-3 rounded-full font-semibold transition-all ${
+                        selectedDuration === duration
+                          ? 'bg-indigo-500 text-white scale-110 shadow-lg'
+                          : `${isDarkMode ? 'bg-slate-700 text-slate-300 hover:bg-slate-600' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow`
+                      }`}
+                    >
+                      {duration} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
               <button
                 onClick={findPartner}
                 className="px-12 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xl font-semibold rounded-full shadow-xl hover:from-indigo-600 hover:to-purple-600 hover:scale-105 transition-all duration-300"
@@ -577,6 +698,20 @@ export default function StudyBuddyConnect() {
 
               {/* Controls */}
               <div className={`flex justify-center items-center gap-4 p-4 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+                {/* Study Mode Toggle */}
+                <button
+                  onClick={() => handleStudyModeChange(studyMode === "normal" ? "silent" : "normal")}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-colors ${
+                    studyMode === "silent" 
+                      ? 'bg-purple-500 text-white' 
+                      : `${isDarkMode ? 'bg-slate-700 text-slate-300' : 'bg-gray-200 text-gray-700'}`
+                  }`}
+                  title={studyMode === "silent" ? "Silent Mode (mic muted)" : "Normal Mode"}
+                >
+                  {studyMode === "silent" ? '🤫 Silent' : '🔊 Normal'}
+                </button>
+                
+                {/* Mic */}
                 <button
                   onClick={toggleMic}
                   className={`p-4 rounded-full transition-colors ${isMicMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
@@ -584,6 +719,8 @@ export default function StudyBuddyConnect() {
                 >
                   {isMicMuted ? "🔇" : "🎤"}
                 </button>
+                
+                {/* Camera */}
                 <button
                   onClick={toggleCamera}
                   className={`p-4 rounded-full transition-colors ${isCameraMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
@@ -591,6 +728,17 @@ export default function StudyBuddyConnect() {
                 >
                   {isCameraMuted ? "📷" : "📹"}
                 </button>
+                
+                {/* Music */}
+                <button
+                  onClick={toggleMusic}
+                  className={`p-4 rounded-full transition-colors ${isPlayingMusic ? 'bg-indigo-500 hover:bg-indigo-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  title={isPlayingMusic ? "Stop music" : "Play lo-fi music"}
+                >
+                  {isPlayingMusic ? "🎵" : "🎧"}
+                </button>
+                
+                {/* Pause */}
                 <button
                   onClick={togglePause}
                   className={`p-4 rounded-full transition-colors ${isPaused ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
@@ -598,6 +746,8 @@ export default function StudyBuddyConnect() {
                 >
                   {isPaused ? "▶️" : "⏸️"}
                 </button>
+                
+                {/* End Call */}
                 <button
                   onClick={endSession}
                   className="p-4 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
@@ -606,6 +756,21 @@ export default function StudyBuddyConnect() {
                   📞
                 </button>
               </div>
+
+              {/* Icebreaker Message */}
+              {showIcebreaker && !isBotSession && (
+                <div className={`text-center p-4 rounded-lg ${isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-50'} animate-pulse`}>
+                  <p className={`text-lg font-semibold ${isDarkMode ? 'text-indigo-200' : 'text-indigo-800'}`}>
+                    👋 Say hi to your study partner!
+                  </p>
+                  <button
+                    onClick={() => setShowIcebreaker(false)}
+                    className={`mt-2 text-sm ${isDarkMode ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-500'}`}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              )}
 
               {/* Chat */}
               <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
