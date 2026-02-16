@@ -148,7 +148,7 @@ export default function StudyBuddyConnect() {
     setIsConnecting(false);
     setShowIcebreaker(true);
     
-    // Get local stream and show it in both videos (simulating partner)
+    // Get local stream and show it only in local video
     navigator.mediaDevices.getUserMedia({
       video: true,
       audio: true,
@@ -156,14 +156,20 @@ export default function StudyBuddyConnect() {
       localStreamRef.current = stream;
       setHasLocalStream(true);
       
+      // Only set local video - NOT remote video (that's the fix!)
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
+      
+      // Clear remote video - show placeholder instead of self
       if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = stream;
+        remoteVideoRef.current.srcObject = null;
       }
+      remoteStreamRef.current = null;
+      setRemoteStreamForVideo(null);
+      
       setIsPeerConnected(true);
-      console.log("🤖 Bot session ready");
+      console.log("🤖 Bot session ready - showing placeholder in partner video");
     }).catch(err => {
       console.error("Error getting local stream for bot:", err);
     });
@@ -427,6 +433,54 @@ export default function StudyBuddyConnect() {
           room.addStream(localStreamRef.current, peerId);
           console.log("📤 Added stream to peer:", peerId);
         }
+      });
+      
+      // Listen for peer leave events - auto-reconnect to new partner
+      room.onPeerLeave((peerId: string) => {
+        console.log("👋 Peer left:", peerId);
+        
+        // Skip if it's our own ID
+        const myId = getSelfId ? getSelfId() : null;
+        if (myId && peerId === myId) {
+          console.log("Ignoring self leave");
+          return;
+        }
+        
+        // Partner disconnected - reset state and find a new partner
+        console.log("🔄 Partner disconnected, searching for new partner...");
+        setIsPeerConnected(false);
+        setIsConnected(false);
+        
+        // Clear remote stream
+        remoteStreamRef.current = null;
+        setRemoteStreamForVideo(null);
+        
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = null;
+        }
+        
+        // Go back to searching and find a new partner
+        setCurrentView("searching");
+        setSearchStatus("Partner disconnected. Finding new partner...");
+        
+        // Reset and search for new peer
+        foundRealPeer = false;
+        
+        // Set new timeout to find new peer (shorter: 15 seconds)
+        botTimeoutRef.current = setTimeout(() => {
+          if (!foundRealPeer) {
+            console.log("⏰ No new peers found after 15 seconds, starting bot session");
+            setSearchStatus("No peers found. Starting practice session...");
+            
+            // Clean up Trystero connection
+            if (roomRef.current) {
+              roomRef.current.leave();
+              roomRef.current = null;
+            }
+            
+            createBotSession();
+          }
+        }, 15000);
       });
       
       // Listen for incoming streams
