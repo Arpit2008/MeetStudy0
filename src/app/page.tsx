@@ -913,7 +913,6 @@ export default function MeetStudyConnect() {
             <div className={`space-y-2 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
               <p className="text-base sm:text-lg font-semibold">Name: Arpit Maurya</p>
               <p className="text-base sm:text-lg">📧 Email: arpitmaurya55555@gmail.com</p>
-              <p className="text-base sm:text-lg">📱 Phone: 8934048188</p>
             </div>
           </div>
 

@@ -25,7 +25,7 @@
 - [x] Added self-ID filtering to avoid connecting to self
 - [x] Fixed client-side exception - Trystero SSR error (dynamic import on client only)
 - [x] Rename: StudyBuddy Connect -> MeetStudy Connect
-- [x] Add admin details (Arpit Maurya, email, phone) to landing page
+- [x] Remove admin phone number from landing page (privacy)
 
 ## Architecture Change
 
