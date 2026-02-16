@@ -29,12 +29,13 @@ const iceServers = [
 const ROOM_ID = "studybuddy-room-v1";
 const APP_ID = "studybuddy-connect-v1";
 
-// Trystero config with IPFS trackers (more reliable than Nostr)
+// Trystero config - using only IPFS trackers (no Nostr relays)
+// IPFS trackers are more reliable and don't have rate limiting issues
 const getTrysteroConfig = () => ({
   trackerUrls: [
     "wss://peer.when.lol",
+    "wss://tracker.fileshost.io",
     "wss://trystero.trackers.moe",
-    "wss://ipv4.trackers.edge-video.dev",
   ],
 });
 
