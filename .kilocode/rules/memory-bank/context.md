@@ -6,6 +6,13 @@
 
 ## Recently Completed
 
+- [x] Improved smartphone layout - larger touch targets (56px buttons), responsive breakpoints
+- [x] Enhanced animation effects - new animations (fade-in, slide-up, scale-in, glow, shake)
+- [x] Video grid: stacked on mobile, side-by-side on desktop
+- [x] Session controls: wrap on mobile for better usability
+- [x] Chat: improved mobile input and button sizes
+- [x] Modal: responsive sizing and touch-friendly buttons
+- [x] Added backdrop blur for modern glassmorphism
 - [x] Switched from PartyKit to Trystero for P2P WebRTC connections
 - [x] Trystero uses BitTorrent/IPFS/Nostr for signaling - no server needed
 - [x] Works in production because it doesn't require a persistent server
