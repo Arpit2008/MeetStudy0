@@ -531,6 +531,41 @@ export default function StudyBuddyConnect() {
           </div>
         </header>
 
+        {/* Donation Section - Top of Homepage */}
+        <div className="px-3 sm:px-4 pt-4 animate-fade-in">
+          <div className="max-w-2xl mx-auto bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500 rounded-2xl p-6 sm:p-8 shadow-xl shadow-sky-500/25 backdrop-blur-md border border-white/20">
+            {/* Heart Animation */}
+            <div className="flex justify-center mb-4">
+              <span className="text-4xl sm:text-5xl animate-pulse">❤️</span>
+            </div>
+            
+            {/* Title */}
+            <h2 className="text-2xl sm:text-3xl font-bold text-white text-center mb-3">
+              Support This Project ❤️
+            </h2>
+            
+            {/* Description */}
+            <p className="text-white/90 text-center mb-6 text-base sm:text-lg">
+              This website is completely free. You can support us by donating any amount.
+            </p>
+            
+            {/* Donate Button */}
+            <div className="flex justify-center">
+              <a
+                href="upi://pay?pa=itsarpita@fam&pn=Support&cu=INR"
+                className="inline-block px-8 py-4 sm:px-10 sm:py-4 bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 text-white text-lg sm:text-xl font-semibold rounded-full shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 animate-pulse"
+              >
+                Donate via UPI
+              </a>
+            </div>
+            
+            {/* Note below button */}
+            <p className="text-white/80 text-center mt-4 text-sm sm:text-base">
+              You can donate any amount you like
+            </p>
+          </div>
+        </div>
+
         {/* Main Content */}
         <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-4xl">
           {connectionError && (
