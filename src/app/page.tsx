@@ -3,7 +3,11 @@
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { joinRoom, Room, selfId } from "trystero";
+
+// Dynamic import for Trystero (only on client side)
+let joinRoom: any = null;
+let getSelfId: any = null;
+let Room: any = null;
 
 // Types
 interface SessionData {
@@ -33,6 +37,23 @@ const getTrysteroConfig = () => ({
     "wss://ipv4.trackers.edge-video.dev",
   ],
 });
+
+// Dynamic import Trystero on client side only
+const loadTrystero = async () => {
+  if (typeof window === 'undefined') return false;
+  
+  try {
+    const trystero = await import("trystero");
+    joinRoom = trystero.joinRoom;
+    getSelfId = () => trystero.selfId;
+    console.log("✅ Trystero loaded successfully");
+    console.log("   selfId:", trystero.selfId);
+    return true;
+  } catch (err) {
+    console.error("❌ Failed to load Trystero:", err);
+    return false;
+  }
+};
 
 export default function StudyBuddyConnect() {
   // App states
@@ -67,8 +88,8 @@ export default function StudyBuddyConnect() {
   const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
   
   // Refs
-  const roomRef = useRef<Room | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const roomRef = useRef<any>(null);
+  const peerConnectionRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -236,24 +257,26 @@ export default function StudyBuddyConnect() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Don't render content until mounted to avoid hydration mismatch
-  if (!mounted) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-indigo-100">
-        <div className="min-h-screen" />
-      </div>
-    );
-  }
-
   // Find partner using Trystero (P2P via BitTorrent/IPFS)
-  const findPartner = useCallback(() => {
+  // NOTE: This must be defined before any early returns to follow React hooks rules
+  const findPartner = useCallback(async () => {
+    // First load Trystero dynamically
     setCurrentView("searching");
     setConnectionError(null);
     setIsConnecting(true);
-    setSearchStatus("Connecting to P2P network...");
+    setSearchStatus("Loading P2P library...");
     
+    const loaded = await loadTrystero();
+    if (!loaded) {
+      setConnectionError("Failed to load P2P library. Please refresh and try again.");
+      setIsConnecting(false);
+      setCurrentView("landing");
+      return;
+    }
+    
+    setSearchStatus("Connecting to P2P network...");
     console.log("🔌 Connecting via Trystero (decentralized P2P)...");
-    console.log("My selfId:", selfId);
+    console.log("My selfId:", getSelfId());
     
     try {
       // Join Trystero room with custom trackers
@@ -281,7 +304,8 @@ export default function StudyBuddyConnect() {
         console.log("👋 Peer joined:", peerId);
         
         // Skip if it's our own ID
-        if (peerId === selfId) {
+        const myId = getSelfId ? getSelfId() : null;
+        if (myId && peerId === myId) {
           console.log("Ignoring self");
           return;
         }
@@ -361,6 +385,15 @@ export default function StudyBuddyConnect() {
       setCurrentView("landing");
     }
   }, [createBotSession]);
+
+  // Don't render content until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-indigo-100">
+        <div className="min-h-screen" />
+      </div>
+    );
+  }
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark bg-slate-900' : 'bg-gradient-to-br from-sky-100 to-indigo-100'}`}>
