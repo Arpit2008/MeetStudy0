@@ -25,18 +25,31 @@ const iceServers = [
 const ROOM_ID = "studybuddy-room-v1";
 const APP_ID = "studybuddy-connect-v1";
 
+// Trystero config with IPFS trackers (more reliable than Nostr)
+const getTrysteroConfig = () => ({
+  trackerUrls: [
+    "wss://peer.when.lol",
+    "wss://trystero.trackers.moe",
+    "wss://ipv4.trackers.edge-video.dev",
+  ],
+});
+
 export default function StudyBuddyConnect() {
   // App states
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const savedTheme = localStorage.getItem("studybuddy-theme");
-      if (savedTheme === "dark") {
-        document.documentElement.classList.add("dark");
-        return true;
-      }
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  
+/* eslint-disable react-hooks/set-state-in-effect */
+  // Initialize dark mode from localStorage after mount
+  useEffect(() => {
+    setMounted(true);
+    const savedTheme = localStorage.getItem("studybuddy-theme");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDarkMode(true);
     }
-    return false;
-  });
+  }, []);
+/* eslint-enable react-hooks/set-state-in-effect */
   const [currentView, setCurrentView] = useState<"landing" | "searching" | "session">("landing");
   
   // Session states
@@ -112,106 +125,6 @@ export default function StudyBuddyConnect() {
       console.error("Error getting local stream for bot:", err);
     });
   }, []);
-
-  // Find partner using Trystero (P2P via BitTorrent/IPFS)
-  const findPartner = useCallback(() => {
-    setCurrentView("searching");
-    setConnectionError(null);
-    setIsConnecting(true);
-    setSearchStatus("Connecting to P2P network...");
-    
-    console.log("🔌 Connecting via Trystero (decentralized P2P)...");
-    console.log("My selfId:", selfId);
-    
-    try {
-      // Join Trystero room - this uses decentralized signaling
-      const room = joinRoom({ appId: APP_ID }, ROOM_ID);
-      roomRef.current = room;
-      
-      console.log("📡 Joined room");
-      setSearchStatus("Searching for study partners...");
-      
-      // Create action for chat
-      const [sendChat, getChat] = room.makeAction("chat");
-      
-      // Handle incoming chat messages
-      getChat((data: any, peerId: string) => {
-        console.log("💬 Chat from peer:", data);
-        setChatMessages(prev => [...prev, { sender: data.sender, text: data.text }]);
-      });
-      
-      // Listen for peer join events
-      room.onPeerJoin((peerId: string) => {
-        console.log("👋 Peer joined:", peerId);
-        
-        // Clear bot timeout since we found a peer
-        if (botTimeoutRef.current) {
-          clearTimeout(botTimeoutRef.current);
-          botTimeoutRef.current = null;
-        }
-        
-        setSearchStatus("Partner found! Connecting...");
-        
-        // Add stream to the new peer
-        if (localStreamRef.current) {
-          room.addStream(localStreamRef.current, peerId);
-          console.log("📤 Added stream to peer:", peerId);
-        }
-      });
-      
-      // Listen for incoming streams
-      room.onPeerStream((stream: MediaStream, peerId: string) => {
-        console.log("📹 Received stream from peer:", peerId);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = stream;
-        }
-        setIsPeerConnected(true);
-        setCurrentView("session");
-        setIsConnected(true);
-        setIsConnecting(false);
-        setTimeRemaining(30 * 60);
-      });
-      
-      // Set a timeout to start bot session if no peers found
-      botTimeoutRef.current = setTimeout(() => {
-        console.log("⏰ No peers found after 10 seconds, starting bot session");
-        setSearchStatus("No peers found. Starting practice session...");
-        
-        // Clean up Trystero connection
-        if (roomRef.current) {
-          roomRef.current.leave();
-          roomRef.current = null;
-        }
-        
-        createBotSession();
-      }, 10000);
-      
-      // Try to get local media and add stream to room
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then((stream) => {
-          localStreamRef.current = stream;
-          setHasLocalStream(true);
-          
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-          
-          // Add stream to room (automatically shares with peers)
-          room.addStream(stream);
-          console.log("📤 Added local stream to room");
-        })
-        .catch(err => {
-          console.error("Error getting media devices:", err);
-          setConnectionError("Could not access camera/microphone. Please check permissions.");
-        });
-        
-    } catch (error) {
-      console.error("Error connecting via Trystero:", error);
-      setConnectionError("Could not connect. Please try again.");
-      setIsConnecting(false);
-      setCurrentView("landing");
-    }
-  }, [createBotSession]);
 
   // End session
   const endSession = useCallback(() => {
@@ -322,6 +235,132 @@ export default function StudyBuddyConnect() {
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
+
+  // Don't render content until mounted to avoid hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-sky-100 to-indigo-100">
+        <div className="min-h-screen" />
+      </div>
+    );
+  }
+
+  // Find partner using Trystero (P2P via BitTorrent/IPFS)
+  const findPartner = useCallback(() => {
+    setCurrentView("searching");
+    setConnectionError(null);
+    setIsConnecting(true);
+    setSearchStatus("Connecting to P2P network...");
+    
+    console.log("🔌 Connecting via Trystero (decentralized P2P)...");
+    console.log("My selfId:", selfId);
+    
+    try {
+      // Join Trystero room with custom trackers
+      const config = getTrysteroConfig();
+      const room = joinRoom({ appId: APP_ID, ...config }, ROOM_ID);
+      roomRef.current = room;
+      
+      console.log("📡 Joined room with IPFS trackers");
+      setSearchStatus("Searching for study partners...");
+      
+      // Create action for chat
+      const [sendChat, getChat] = room.makeAction("chat");
+      
+      // Handle incoming chat messages
+      getChat((data: any, peerId: string) => {
+        console.log("💬 Chat from peer:", data);
+        setChatMessages(prev => [...prev, { sender: data.sender, text: data.text }]);
+      });
+      
+      // Track if we found a real peer
+      let foundRealPeer = false;
+      
+      // Listen for peer join events
+      room.onPeerJoin((peerId: string) => {
+        console.log("👋 Peer joined:", peerId);
+        
+        // Skip if it's our own ID
+        if (peerId === selfId) {
+          console.log("Ignoring self");
+          return;
+        }
+        
+        foundRealPeer = true;
+        
+        // Clear bot timeout since we found a peer
+        if (botTimeoutRef.current) {
+          clearTimeout(botTimeoutRef.current);
+          botTimeoutRef.current = null;
+        }
+        
+        setSearchStatus("Partner found! Connecting...");
+        
+        // Add stream to the new peer
+        if (localStreamRef.current) {
+          room.addStream(localStreamRef.current, peerId);
+          console.log("📤 Added stream to peer:", peerId);
+        }
+      });
+      
+      // Listen for incoming streams
+      room.onPeerStream((stream: MediaStream, peerId: string) => {
+        console.log("📹 Received stream from peer:", peerId);
+        console.log("Stream tracks:", stream.getTracks().length);
+        
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+          console.log("📹 Remote video srcObject set");
+        }
+        setIsPeerConnected(true);
+        setCurrentView("session");
+        setIsConnected(true);
+        setIsConnecting(false);
+        setTimeRemaining(30 * 60);
+      });
+      
+      // Set a timeout to start bot session if no peers found
+      botTimeoutRef.current = setTimeout(() => {
+        if (!foundRealPeer) {
+          console.log("⏰ No peers found after 30 seconds, starting bot session");
+          setSearchStatus("No peers found. Starting practice session...");
+          
+          // Clean up Trystero connection
+          if (roomRef.current) {
+            roomRef.current.leave();
+            roomRef.current = null;
+          }
+          
+          createBotSession();
+        }
+      }, 30000);
+      
+      // Try to get local media and add stream to room
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          localStreamRef.current = stream;
+          setHasLocalStream(true);
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          
+          // Add stream to room (automatically shares with peers)
+          room.addStream(stream);
+          console.log("📤 Added local stream to room");
+        })
+        .catch(err => {
+          console.error("Error getting media devices:", err);
+          setConnectionError("Could not access camera/microphone. Please check permissions.");
+        });
+        
+    } catch (error) {
+      console.error("Error connecting via Trystero:", error);
+      setConnectionError("Could not connect. Please try again.");
+      setIsConnecting(false);
+      setCurrentView("landing");
+    }
+  }, [createBotSession]);
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark bg-slate-900' : 'bg-gradient-to-br from-sky-100 to-indigo-100'}`}>
