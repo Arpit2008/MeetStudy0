@@ -47,6 +47,7 @@
 - [x] **Fix**: Simplified client (page.tsx) with more robust socket initialization and explicit wait for connection
 - [x] **Fix**: Simplified server.js with cleaner matching logic
 - [x] **Fix**: Improved socket connection with explicit localhost URL and connection status indicator
+- [x] **Fix**: Use window.location.origin for socket connection in both dev and production
 
 ## Current Structure
 
