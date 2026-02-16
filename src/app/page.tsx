@@ -3,22 +3,12 @@
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { io, Socket } from "socket.io-client";
+import { joinRoom, selfId } from "trystero/torrent";
 
 // Types
-interface UserData {
-  id: string;
-}
-
-interface PartnerData extends UserData {
-  isInitiator: boolean;
-}
-
 interface SessionData {
   sessionId: string;
-  partner: PartnerData;
-  isInitiator: boolean;
-  isBotSession?: boolean;
+  partnerId: string;
 }
 
 // Ice servers for WebRTC - Using reliable free STUN servers
@@ -30,6 +20,9 @@ const iceServers = [
   { urls: "stun:stun4.l.google.com:19302" },
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
+
+// Room configuration
+const APP_ID = "studybuddy_connect_v1";
 
 export default function StudyBuddyConnect() {
   // App states
@@ -51,17 +44,16 @@ export default function StudyBuddyConnect() {
   const [isPaused, setIsPaused] = useState(false);
   const [isCameraMuted, setIsCameraMuted] = useState(false);
   const [isMicMuted, setIsMicMuted] = useState(false);
-  const [searchPosition, setSearchPosition] = useState(1);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
   const [hasLocalStream, setHasLocalStream] = useState(false);
   const [isPeerConnected, setIsPeerConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
   
   // Refs
-  const socketRef = useRef<Socket | null>(null);
-  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const roomRef = useRef<ReturnType<typeof joinRoom> | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -70,6 +62,7 @@ export default function StudyBuddyConnect() {
   const chatMessagesRef = useRef<HTMLDivElement>(null);
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
+  const [isBotSession, setIsBotSession] = useState(false);
 
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
@@ -89,232 +82,135 @@ export default function StudyBuddyConnect() {
     });
   }, []);
 
-  // Initialize Socket.io - simplified and more reliable
-  const initSocket = useCallback(() => {
-    if (socketRef.current?.connected) {
-      console.log("Socket already connected:", socketRef.current.id);
-      setIsConnecting(false);
-      return socketRef.current;
-    }
+  // Create bot session (for when no peers are found)
+  const createBotSession = useCallback(() => {
+    console.log("🤖 Creating bot session...");
+    setIsBotSession(true);
+    setCurrentView("session");
+    setTimeRemaining(30 * 60);
+    setIsConnected(true);
+    setIsConnecting(false);
     
-    // Disconnect existing socket if not connected
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-    }
-    
-    // Use current origin for socket connection - works both locally and deployed
-    // Socket.io is served from the same server as the app
-    const serverUrl = typeof window !== 'undefined' ? window.location.origin : '';
-    
-    console.log("🔌 Connecting to socket server:", serverUrl || "(same origin)");
-    setIsConnecting(true);
-    
-    socketRef.current = io(serverUrl, {
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      reconnectionDelayMax: 5000,
-      timeout: 20000,
-      transports: ['websocket', 'polling'],
-      forceNew: true,
-    });
-
-    socketRef.current.on("connect", () => {
-      console.log("✅ Connected to server! Socket ID:", socketRef.current?.id);
-      setConnectionError(null);
-      setIsConnecting(false);
-      setIsConnected(true);
-    });
-
-    socketRef.current.on("connect_error", (error) => {
-      console.error("❌ Connection error:", error.message);
-      setConnectionError("Could not connect to server. Please refresh and try again.");
-      setIsConnecting(false);
-      setIsConnected(false);
-    });
-
-    socketRef.current.on("disconnect", (reason) => {
-      console.log("Disconnected:", reason);
-      setIsConnected(false);
-      if (reason === 'io server disconnect') {
-        // Server disconnected, reconnect manually
-        socketRef.current?.connect();
-      }
-    });
-
-    socketRef.current.on("reconnect", (attempt) => {
-      console.log("Reconnected after", attempt, "attempts");
-      setConnectionError(null);
-      setIsConnecting(false);
-      setIsConnected(true);
-    });
-
-    socketRef.current.on("reconnect_failed", () => {
-      setConnectionError("Could not connect to server. Please refresh and try again.");
-      setIsConnecting(false);
-      setIsConnected(false);
-    });
-    
-    return socketRef.current;
-  }, []);
-
-  // Wait for socket to be ready before emitting events
-  const waitForSocket = useCallback((socket: Socket, callback: () => void, maxWait = 15000) => {
-    if (socket.connected && socket.id) {
-      console.log("Socket already connected:", socket.id);
-      callback();
-      return;
-    }
-    
-    console.log("Waiting for socket connection...");
-    const startTime = Date.now();
-    const checkConnection = () => {
-      if (socket.connected && socket.id) {
-        console.log("Socket connected after wait:", socket.id);
-        callback();
-        return;
-      }
-      
-      if (Date.now() - startTime > maxWait) {
-        console.error("Timeout waiting for socket connection");
-        setConnectionError("Connection timeout. Please refresh and try again.");
-        setCurrentView("landing");
-        return;
-      }
-      
-      setTimeout(checkConnection, 200);
-    };
-    
-    checkConnection();
-  }, []);
-
-  // WebRTC handlers
-  const createPeerConnection = useCallback(() => {
-    const pc = new RTCPeerConnection({ iceServers });
-    
-    pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current?.connected) {
-        socketRef.current.emit("ice-candidate", {
-          sessionId: sessionData?.sessionId,
-          candidate: event.candidate,
-          targetId: sessionData?.partner.id,
-        });
-      }
-    };
-    
-    pc.ontrack = (event) => {
-      console.log("Received remote track:", event.streams[0]);
-      if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = event.streams[0];
-      }
-      setIsPeerConnected(true);
-    };
-    
-    pc.oniceconnectionstatechange = () => {
-      console.log("ICE Connection State:", pc.iceConnectionState);
-      if (pc.iceConnectionState === 'connected') {
-        setIsPeerConnected(true);
-      }
-    };
-    
-    peerConnectionRef.current = pc;
-    return pc;
-  }, []);
-
-  const startWebRTC = useCallback(async (isInitiator: boolean) => {
-    try {
-      console.log("🎥 Starting WebRTC, isInitiator:", isInitiator);
-      
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      
+    // Get local stream and show it in both videos (simulating partner)
+    navigator.mediaDevices.getUserMedia({
+      video: true,
+      audio: true,
+    }).then(stream => {
       localStreamRef.current = stream;
       setHasLocalStream(true);
       
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = stream;
+      }
+      setIsPeerConnected(true);
+      console.log("🤖 Bot session ready");
+    }).catch(err => {
+      console.error("Error getting local stream for bot:", err);
+    });
+  }, []);
+
+  // Find partner using Trystero
+  const findPartner = useCallback(() => {
+    setCurrentView("searching");
+    setConnectionError(null);
+    setIsConnecting(true);
+    setSearchStatus("Looking for study partners...");
+    
+    // Generate a random room ID for matching
+    const roomId = `study_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    console.log("🔍 Joining Trystero room:", roomId);
+    console.log("My ID:", selfId);
+    
+    try {
+      const room = joinRoom({ appId: APP_ID }, roomId);
+      roomRef.current = room;
       
-      const pc = createPeerConnection();
-      
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
+      // Listen for peers joining
+      room.onPeerJoin((peerId) => {
+        console.log("👋 Peer joined:", peerId);
+        setSearchStatus("Partner found! Connecting...");
+        setIsConnecting(false);
+        setIsConnected(true);
+        
+        // Create session
+        setSessionData({
+          sessionId: roomId,
+          partnerId: peerId
+        });
+        
+        // Get local stream and send to peer
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+          .then(stream => {
+            localStreamRef.current = stream;
+            setHasLocalStream(true);
+            
+            if (localVideoRef.current) {
+              localVideoRef.current.srcObject = stream;
+            }
+            
+            // Add stream to room (sends to all peers)
+            room.addStream(stream);
+            console.log("📹 Local stream added to room");
+          })
+          .catch(err => {
+            console.error("Error getting media devices:", err);
+          });
       });
       
-      if (isInitiator) {
-        const dataChannel = pc.createDataChannel("chat");
-        dataChannelRef.current = dataChannel;
-        
-        dataChannel.onmessage = (event) => {
-          const msg = event.data;
-          setChatMessages(prev => [...prev, { sender: "Partner", text: msg }]);
-        };
-        
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        if (socketRef.current?.connected) {
-          socketRef.current.emit("webrtc-offer", {
-            sessionId: sessionData?.sessionId,
-            offer: pc.localDescription,
-            targetId: sessionData?.partner.id,
-          });
+      // Listen for peers leaving
+      room.onPeerLeave((peerId) => {
+        console.log("👋 Peer left:", peerId);
+        // Use ref to call endSession
+        if (sessionData?.partnerId === peerId) {
+          endSessionRef.current();
         }
-      }
-    } catch (error) {
-      console.error("Error starting WebRTC:", error);
-    }
-  }, []);
-
-  const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string }) => {
-    console.log("📨 Handling WebRTC offer from:", data.from);
-    
-    try {
-      const pc = createPeerConnection();
+      });
       
-      pc.ondatachannel = (event) => {
-        dataChannelRef.current = event.channel;
-        event.channel.onmessage = (e) => {
-          setChatMessages(prev => [...prev, { sender: "Partner", text: e.data }]);
-        };
-      };
+      // Listen for peer streams
+      room.onPeerStream((stream, peerId) => {
+        console.log("📹 Received stream from peer:", peerId);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+        }
+        setIsPeerConnected(true);
+      });
       
-      await pc.setRemoteDescription(data.offer);
+      // Create chat action
+      const [sendMessage, getMessage] = room.makeAction("chat");
+      getMessage((data: any, peerId: string) => {
+        setChatMessages(prev => [...prev, { sender: "Partner", text: String(data) }]);
+      });
       
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      // Store send function for later use
+      (window as any).__chatSend = sendMessage;
       
-      if (socketRef.current?.connected) {
-        socketRef.current.emit("webrtc-answer", {
-          sessionId: sessionData?.sessionId,
-          answer: pc.localDescription,
-          targetId: data.from,
-        });
-      }
+      // Show searching status after a delay
+      setTimeout(() => {
+        if (!sessionData && currentView === "searching") {
+          setSearchStatus("No partners found yet. Keep waiting...");
+        }
+      }, 3000);
+      
+      // Timeout - create bot session after 15 seconds if no peer found
+      setTimeout(() => {
+        if (!sessionData && currentView === "searching") {
+          console.log("⏰ Timeout - creating bot session");
+          room.leave();
+          createBotSession();
+        }
+      }, 15000);
+      
     } catch (error) {
-      console.error("Error handling WebRTC offer:", error);
+      console.error("Error joining Trystero room:", error);
+      setConnectionError("Could not connect. Please try again.");
+      setIsConnecting(false);
+      setCurrentView("landing");
     }
-  }, []);
-
-  const handleWebRTCAnswer = useCallback(async (data: { answer: RTCSessionDescriptionInit; from: string }) => {
-    console.log("📨 Handling WebRTC answer from:", data.from);
-    
-    try {
-      await peerConnectionRef.current?.setRemoteDescription(data.answer);
-    } catch (error) {
-      console.error("Error handling WebRTC answer:", error);
-    }
-  }, []);
-
-  const handleIceCandidate = useCallback(async (data: { candidate: RTCIceCandidateInit; from: string }) => {
-    try {
-      await peerConnectionRef.current?.addIceCandidate(data.candidate);
-    } catch (error) {
-      console.error("Error adding ICE candidate:", error);
-    }
-  }, []);
+  }, [sessionData, currentView, createBotSession]);
 
   // End session
   const endSession = useCallback(() => {
@@ -325,13 +221,9 @@ export default function StudyBuddyConnect() {
       localStreamRef.current = null;
     }
     
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-    
-    if (socketRef.current?.connected) {
-      socketRef.current.emit("end-session", { sessionId: sessionData?.sessionId });
+    if (roomRef.current) {
+      roomRef.current.leave();
+      roomRef.current = null;
     }
     
     if (timerRef.current) {
@@ -346,98 +238,16 @@ export default function StudyBuddyConnect() {
     setCurrentView("landing");
     setShowCompletionModal(false);
     setChatMessages([]);
-  }, [sessionData?.sessionId]);
-
-  // Auto-connect socket on page load
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    const socket = initSocket();
+    setIsBotSession(false);
+    setIsConnected(false);
     
-    // If already connected, we're good
-    if (socket.connected) {
-      return;
-    }
-    
-    // Otherwise wait for connection
-    const checkConnection = () => {
-      if (socket.connected) {
-        return;
-      }
-      setTimeout(checkConnection, 500);
-    };
-    
-    // Give it a moment then start checking
-    setTimeout(checkConnection, 1000);
-  }, [initSocket]);
+    delete (window as any).__chatSend;
+  }, []);
 
   // Set up endSession ref
   useEffect(() => {
     endSessionRef.current = endSession;
   }, [endSession]);
-
-  // Set up socket event listeners
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    const socket = initSocket();
-    
-    socket.on("waiting", (data: { position: number }) => {
-      console.log("📍 Waiting in queue, position:", data.position);
-      setSearchPosition(data.position);
-    });
-
-    socket.on("match-found", async (data: SessionData) => {
-      console.log("🎉 Match found!", data);
-      setSessionData(data);
-      setCurrentView("session");
-      setTimeRemaining(30 * 60);
-      
-      // Check if bot session
-      if (data.isBotSession) {
-        console.log("🤖 Bot session - getting local stream");
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: true,
-          });
-          localStreamRef.current = stream;
-          setHasLocalStream(true);
-          
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-          if (remoteVideoRef.current) {
-            remoteVideoRef.current.srcObject = stream;
-          }
-          setIsPeerConnected(true);
-          console.log("🤖 Bot session ready");
-        } catch (err) {
-          console.error("Error getting local stream for bot:", err);
-        }
-        return;
-      }
-      
-      // Start WebRTC for real user
-      await startWebRTC(data.isInitiator);
-    });
-
-    socket.on("webrtc-offer", handleWebRTCOffer);
-    socket.on("webrtc-answer", handleWebRTCAnswer);
-    socket.on("ice-candidate", handleIceCandidate);
-
-    socket.on("session-ended", (data: { reason: string }) => {
-      console.log("Session ended:", data.reason);
-      endSession();
-    });
-
-    return () => {
-      socket.off("waiting");
-      socket.off("match-found");
-      socket.off("webrtc-offer");
-      socket.off("webrtc-answer");
-      socket.off("ice-candidate");
-      socket.off("session-ended");
-    };
-  }, [initSocket, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, startWebRTC, endSession]);
 
   // Timer
   useEffect(() => {
@@ -458,21 +268,6 @@ export default function StudyBuddyConnect() {
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [currentView, isPaused, timeRemaining]);
-
-  // Find partner
-  const findPartner = useCallback(() => {
-    const socket = initSocket();
-    setCurrentView("searching");
-    setConnectionError(null);
-    
-    // Wait for socket to be ready before joining queue
-    waitForSocket(socket, () => {
-      // Use the socket id that was assigned on connection
-      const socketId = socket.id || `temp-${Date.now()}`;
-      console.log("🔍 Joining queue with socket ID:", socketId);
-      socket.emit("join-queue", { id: socketId });
-    }, 20000); // Increase timeout to 20 seconds
-  }, [initSocket, waitForSocket]);
 
   // Toggle camera
   const toggleCamera = useCallback(() => {
@@ -503,8 +298,9 @@ export default function StudyBuddyConnect() {
 
   // Send chat message
   const sendChatMessage = useCallback(() => {
-    if (chatInput.trim() && dataChannelRef.current?.readyState === "open") {
-      dataChannelRef.current.send(chatInput);
+    const sendFn = (window as any).__chatSend;
+    if (chatInput.trim() && sendFn) {
+      sendFn(chatInput); // Sends to all peers
       setChatMessages(prev => [...prev, { sender: "You", text: chatInput }]);
       setChatInput("");
     }
@@ -546,22 +342,10 @@ export default function StudyBuddyConnect() {
             <div className="text-center py-20">
               {/* Connection Status */}
               <div className="mb-6">
-                {isConnecting ? (
-                  <span className="inline-flex items-center px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full">
-                    <span className="w-2 h-2 bg-yellow-500 rounded-full mr-2 animate-pulse"></span>
-                    Connecting to server...
-                  </span>
-                ) : isConnected ? (
-                  <span className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full">
-                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
-                    Connected
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center px-4 py-2 bg-red-100 text-red-800 rounded-full">
-                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
-                    Not connected - Click button to connect
-                  </span>
-                )}
+                <span className="inline-flex items-center px-4 py-2 bg-green-100 text-green-800 rounded-full">
+                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  Ready to Connect (P2P)
+                </span>
               </div>
               
               <div className="mb-8">
@@ -580,7 +364,7 @@ export default function StudyBuddyConnect() {
                 Find a Study Partner
               </button>
               <p className={`mt-4 text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
-                🔒 100% Private • No Login Required • Video Sessions
+                🔒 100% Private • No Login Required • Video Sessions • P2P Connection
               </p>
             </div>
           )}
@@ -595,7 +379,7 @@ export default function StudyBuddyConnect() {
                 Finding Your Study Partner...
               </h2>
               <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                Position in queue: <span className="font-bold text-indigo-500">{searchPosition}</span>
+                {searchStatus}
               </p>
               <div className="flex justify-center gap-2 mb-8">
                 <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse"></div>
@@ -603,10 +387,7 @@ export default function StudyBuddyConnect() {
                 <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse delay-200"></div>
               </div>
               <button
-                onClick={() => {
-                  socketRef.current?.emit("leave-queue");
-                  setCurrentView("landing");
-                }}
+                onClick={endSession}
                 className="px-8 py-3 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors"
               >
                 Cancel
@@ -650,9 +431,9 @@ export default function StudyBuddyConnect() {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                    Partner {sessionData?.isBotSession && '🤖'}
+                    Partner {isBotSession && '🤖'}
                   </div>
-                  {!isPeerConnected && !sessionData?.isBotSession && (
+                  {!isPeerConnected && !isBotSession && (
                     <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                       <p className="text-white">Connecting...</p>
                     </div>
@@ -709,7 +490,7 @@ export default function StudyBuddyConnect() {
                       onChange={(e) => setChatInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
                       placeholder="Type a message..."
-                      className={`flex-1 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 text-white border-slate-600' : 'border-gray-300'}`}
+                      className={`flex-1 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 text-white border-slate-600' : 'bg-gray-50 text-gray-800 border-gray-300'}`}
                     />
                     <button
                       onClick={sendChatMessage}
@@ -722,28 +503,28 @@ export default function StudyBuddyConnect() {
               </div>
             </div>
           )}
-        </main>
 
-        {/* Completion Modal */}
-        {showCompletionModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-            <div className={`rounded-2xl p-8 max-w-md text-center ${isDarkMode ? 'bg-slate-800' : 'bg-white'}`}>
-              <div className="text-6xl mb-4">🎉</div>
-              <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
-                Session Complete!
-              </h2>
-              <p className={`mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                Great work! You completed a focused study session.
-              </p>
-              <button
-                onClick={endSession}
-                className="px-8 py-3 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 transition-colors"
-              >
-                Back to Home
-              </button>
+          {/* Completion Modal */}
+          {showCompletionModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className={`p-8 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-2xl text-center`}>
+                <div className="text-6xl mb-4">🎉</div>
+                <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                  Session Complete!
+                </h2>
+                <p className={`mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  Great job! You completed your study session.
+                </p>
+                <button
+                  onClick={() => setShowCompletionModal(false)}
+                  className="px-8 py-3 bg-indigo-500 text-white rounded-full hover:bg-indigo-600"
+                >
+                  Find Another Partner
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </main>
       </div>
     </div>
   );

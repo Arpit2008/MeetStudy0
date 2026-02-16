@@ -1,0 +1,5 @@
+{
+  "name": "studybuddy-connect",
+  "main": "party/server.ts",
+  "compatibilityDate": "2025-02-15"
+}

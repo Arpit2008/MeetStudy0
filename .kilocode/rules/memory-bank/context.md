@@ -2,101 +2,37 @@
 
 ## Current State
 
-**Project Status**: ✅ Complete - Simplified one-button study partner matching
+**Project Status**: ✅ Complete - Using Trystero for P2P connections (no server needed)
 
 ## Recently Completed
 
-- [x] Base Next.js 16 setup with Socket.io signaling server
-- [x] Glassmorphism UI with sky-blue theme
-- [x] Matching logic with waiting queue system
-- [x] WebRTC peer-to-peer video connection
-- [x] Study session UI with timer, video controls, mute buttons
-- [x] Privacy-focused design: no login, no history saved, 100% private sessions
-- [x] **Bug fix**: Queue matching now checks for matches every 2 seconds (was only checking when new users joined)
-- [x] **Bug fix**: Queue position updates now sent every 5 seconds
-- [x] **Bug fix**: Added TURN servers for better laptop-to-phone WebRTC connectivity (uses Metered.ca free TURN servers)
-- [x] **Bug fix**: Improved matching algorithm to be more flexible (allows 15-min duration tolerance, faster matching)
-- [x] **Critical fix**: Simplified queue matching to connect ANY two random users immediately (removed complex topic/duration matching logic)
-- [x] **Critical fix**: Client now waits for socket connection before emitting join-queue (no more race conditions)
-- [x] **Critical fix**: Added `attemptMatch()` function that simply grabs first 2 users from queue and matches them
-- [x] **Critical fix**: Better logging and connection error handling on client side
-- [x] **UI simplification**: Removed all options (duration, gender, topic, study mode) - now just ONE "Find a Study Partner" button
-- [x] **UI simplification**: Always uses 30-minute video sessions (no more mode selection)
-- [x] **UI improvement**: Clean, simple landing page with single call-to-action button
-- [x] **Bug fix**: Fixed matching queue - users now added to queue first, then immediate match attempt
-- [x] **Critical fix**: Socket connection now uses explicit server URL and has reconnection logic with up to 10 attempts
-- [x] **Bug fix**: Added detailed logging to server for debugging queue/matching issues
-- [x] **Bug fix**: Reduced client timeout from 20s to 5s to avoid connection timeout errors
-- [x] **Bug fix**: Added pingTimeout/pingInterval to server to keep connections alive
-- [x] **Bug fix**: Fixed attemptMatch logic - removed redundant while loop, use recursion instead
-- [x] **Feature**: Auto-bot for testing - creates bot match after 5 seconds if user is alone in queue
-- [x] **Bug fix**: Bot now triggers immediately on join-queue (not just via interval) - fixes production deployment issue
-- [x] **Improvement**: Switched to more reliable STUN servers (Google + Twilio) - removed unreliable OpenRelay TURN servers
-- [x] **Improvement**: Added ICE connection timeout handler and automatic restart on failure
-- [x] **Critical fix**: Fixed WebRTC ICE candidate handling - now uses data parameter directly instead of relying on sessionData state (which could be null)
-- [x] **Critical fix**: Fixed handleWebRTCOffer - now gets local stream BEFORE creating peer connection, and properly sets up ICE handlers with correct targetId
-- [x] **Improvement**: Made matching more aggressive with multiple retry attempts at 50ms, 100ms, 200ms, 500ms intervals
-- [x] **Improvement**: Changed queue position calculation to use indexOf for more reliability
-- [x] **Improvement**: Reduced bot fallback from 5 seconds to 3 seconds for faster testing
-- [x] **Improvement**: Added more detailed logging for debugging queue matching issues
-- [x] **Fix**: Added socket connectivity check in attemptMatch - verifies both sockets are still connected before matching
-- [x] **Fix**: Increased bot fallback delay from 3s to 5s to give real users more time to join
-- [x] **Fix**: Changed matching interval from 1s to 500ms for more aggressive matching
-- [x] **Fix**: Improved client-side connection timeout handling and error messages
-- [x] **Fix**: Fixed "Could not connect to server" error - completely rewrote socket connection logic for more reliability
-- [x] **Fix**: Simplified client (page.tsx) with more robust socket initialization and explicit wait for connection
-- [x] **Fix**: Simplified server.js with cleaner matching logic
-- [x] **Fix**: Improved socket connection with explicit localhost URL and connection status indicator
-- [x] **Fix**: Use window.location.origin for socket connection in both dev and production
+- [x] Switched from Socket.io to Trystero for P2P WebRTC connections
+- [x] Trystero uses BitTorrent/IPFS/Nostr for signaling - no server needed
+- [x] Works in production because it doesn't require a persistent server
+- [x] Bot fallback still works when no peers are found (after 15 seconds)
+- [x] Video/audio streaming via Trystero's addStream/onPeerStream APIs
+- [x] Chat via Trystero's makeAction API
+
+## Architecture Change
+
+**Before**: Socket.io server (required persistent server)
+- Failed in production because Kiloapps only runs Next.js, not custom Node.js server
+
+**After**: Trystero (P2P, serverless)
+- Uses decentralized signaling (BitTorrent trackers)
+- No server required - works completely in browser
+- End-to-end encrypted P2P connections
 
 ## Current Structure
 
 | File/Directory | Purpose | Status |
 |----------------|---------|--------|
-| `server.js` | Socket.io signaling server for matchmaking | ✅ Ready |
-| `src/app/page.tsx` | Main application with all UI and WebRTC logic | ✅ Ready |
-| `src/app/globals.css` | Custom glassmorphism and animations | ✅ Ready |
-| `src/app/layout.tsx` | Root layout with metadata | ✅ Ready |
+| `src/app/page.tsx` | Main app with Trystero P2P logic | ✅ Ready |
+| `src/app/globals.css` | Glassmorphism and animations | ✅ Ready |
+| `src/app/layout.tsx` | Root layout | ✅ Ready |
 
 ## Running the Application
 
 ```bash
-bun run dev  # Starts both Next.js and Socket.io server on port 3000
+bun run dev  # Development mode
 ```
-
-## Key Features Implemented
-
-1. **Simplified Landing Page** - Single "Find a Study Partner" button:
-   - No options to select
-   - Always uses 30-minute video sessions
-   - Glassmorphism design with gradient text
-   - Connection status indicator (connecting/connected/not connected)
-   - Auto-connect on page load
-
-2. **Matching System** - Queue-based matching with:
-   - Periodic match checking every 2 seconds
-   - Connects any two random users immediately
-   - No topic/duration/gender preferences needed
-
-3. **Connection System** - WebRTC P2P with:
-   - Direct browser-to-browser video/audio
-   - Text chat available via data channels
-   - No recording, no storage
-
-4. **Study Session UI**:
-   - Split screen video layout
-   - Live countdown timer with pause
-   - Mute camera/microphone controls
-   - End session button
-
-## Privacy Design
-
-- No authentication required
-- No database storage
-- Sessions are temporary and in-memory only
-- No chat history saved
-- Direct P2P connections via WebRTC
-
-## Pending Improvements
-
-- None currently - all core features implemented
