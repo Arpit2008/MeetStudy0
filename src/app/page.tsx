@@ -905,6 +905,18 @@ export default function MeetStudyConnect() {
             </div>
           )}
 
+          {/* Admin Details */}
+          <div className={`mt-8 sm:mt-12 text-center p-4 sm:p-6 rounded-xl ${isDarkMode ? 'bg-slate-800/60' : 'bg-white/60'} backdrop-blur shadow-lg`}>
+            <h3 className={`text-lg sm:text-xl font-bold mb-3 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+              👨‍💻 Admin Details
+            </h3>
+            <div className={`space-y-2 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+              <p className="text-base sm:text-lg font-semibold">Name: Arpit Maurya</p>
+              <p className="text-base sm:text-lg">📧 Email: arpitmaurya55555@gmail.com</p>
+              <p className="text-base sm:text-lg">📱 Phone: 8934048188</p>
+            </div>
+          </div>
+
           {/* Completion Modal - Mobile optimized */}
           {showCompletionModal && (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
