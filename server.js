@@ -15,6 +15,7 @@ const activeSessions = new Map();
 app.prepare().then(() => {
   const server = express();
   const httpServer = createServer(server);
+  
   const io = new Server(httpServer, {
     cors: {
       origin: "*",
@@ -24,15 +25,17 @@ app.prepare().then(() => {
     pingInterval: 25000
   });
 
+  console.log("🚀 Socket.io server starting...");
+
   // Socket.io signaling server
   io.on('connection', (socket) => {
-    console.log('User connected:', socket.id);
+    console.log('✅ User connected:', socket.id);
 
     // User joins waiting queue
     socket.on('join-queue', (userData) => {
-      console.log('Join queue request from:', socket.id, 'Data:', userData);
+      console.log('📝 Join queue request from:', socket.id);
       
-      // Prevent duplicate entries - check if already in queue
+      // Prevent duplicate entries
       const existingIndex = waitingUsers.findIndex(w => w.id === socket.id);
       if (existingIndex > -1) {
         console.log('User already in queue, skipping');
@@ -45,30 +48,13 @@ app.prepare().then(() => {
         joinedAt: Date.now()
       };
 
-      // Add to waiting queue FIRST
       waitingUsers.push(user);
-      const position = waitingUsers.indexOf(user) + 1; // Use indexOf to get position
+      const position = waitingUsers.indexOf(user) + 1;
       socket.emit('waiting', { position });
-      console.log(`User ${socket.id} added to queue at position ${position}. Total waiting: ${waitingUsers.length}`);
+      console.log(`User ${socket.id} added to queue. Position: ${position}, Total: ${waitingUsers.length}`);
       
-      // Try to match IMMEDIATELY - multiple attempts for reliability
+      // Try to match immediately
       attemptMatch();
-      // Try again after small delays in case of race conditions
-      setTimeout(attemptMatch, 50);
-      setTimeout(attemptMatch, 100);
-      setTimeout(attemptMatch, 200);
-      setTimeout(attemptMatch, 500);
-      
-      // Bot fallback - only if still alone after 5 seconds (increased from 3s)
-      if (waitingUsers.length === 1) {
-        setTimeout(() => {
-          // Check if still alone in queue
-          if (waitingUsers.length === 1 && waitingUsers[0].id === socket.id) {
-            console.log(`[Bot] Creating bot for single user ${socket.id}`);
-            createBotSession(socket.id);
-          }
-        }, 5000); // 5 second delay - give real users more time to join
-      }
     });
 
     // WebRTC signaling - offer
@@ -127,11 +113,11 @@ app.prepare().then(() => {
 
     // Disconnect handling
     socket.on('disconnect', () => {
-      // Remove from waiting queue if present
+      // Remove from waiting queue
       const index = waitingUsers.findIndex(w => w.id === socket.id);
       if (index > -1) {
         waitingUsers.splice(index, 1);
-        console.log(`User ${socket.id} disconnected from queue`);
+        console.log(`User ${socket.id} removed from queue (disconnected)`);
       }
 
       // End any active sessions
@@ -146,49 +132,31 @@ app.prepare().then(() => {
         }
       }
       
-      console.log('User disconnected:', socket.id);
+      console.log('❌ User disconnected:', socket.id);
     });
   });
 
-  // Try to match two users from the queue immediately
+  // Match two users from the queue
   function attemptMatch() {
-    console.log(`[attemptMatch] Called. Current queue length: ${waitingUsers.length}`);
-    
-    // Need at least 2 users to match
     if (waitingUsers.length < 2) {
-      console.log(`[attemptMatch] Not enough users (${waitingUsers.length}), skipping`);
       return;
     }
     
-    // Get first two users (check they exist and are not undefined)
     const user1 = waitingUsers[0];
     const user2 = waitingUsers[1];
     
-    if (!user1 || !user2) {
-      console.log(`[attemptMatch] User undefined: user1=${!!user1}, user2=${!!user2}`);
-      return;
-    }
-    
-    // Check if both users are still connected (have active socket connections)
-    // We verify this by checking the socket exists in io.sockets.sockets
+    // Verify both sockets are connected
     const socket1 = io.sockets.sockets.get(user1.id);
     const socket2 = io.sockets.sockets.get(user2.id);
     
     if (!socket1 || !socket2) {
-      console.log(`[attemptMatch] One or both sockets not connected, cleaning up queue`);
-      // Remove disconnected users from queue
-      if (!socket1 && user1) {
-        const idx = waitingUsers.findIndex(w => w.id === user1.id);
-        if (idx > -1) waitingUsers.splice(idx, 1);
-      }
-      if (!socket2 && user2) {
-        const idx = waitingUsers.findIndex(w => w.id === user2.id);
-        if (idx > -1) waitingUsers.splice(idx, 1);
-      }
+      // Clean up disconnected users
+      if (!socket1) waitingUsers.shift();
+      if (!socket2 && waitingUsers.length > 1) waitingUsers.splice(1, 1);
       return;
     }
     
-    console.log(`[attemptMatch] Matching user1=${user1.id} with user2=${user2.id}`);
+    console.log(`🎯 Matching ${user1.id} with ${user2.id}`);
     
     // Remove both from waiting queue
     waitingUsers.splice(0, 2);
@@ -199,7 +167,7 @@ app.prepare().then(() => {
       id: sessionId,
       users: [user1, user2],
       startTime: Date.now(),
-      duration: 30 * 60 * 1000 // 30 minutes in ms
+      duration: 30 * 60 * 1000
     };
     activeSessions.set(sessionId, session);
     
@@ -215,34 +183,27 @@ app.prepare().then(() => {
       isInitiator: false
     });
     
-    console.log(`✅ Match found: ${user1.id} with ${user2.id}. Remaining: ${waitingUsers.length}`);
+    console.log(`✅ Match created: ${sessionId}`);
     
-    // If more users waiting, try to match again immediately
+    // Try to match more users
     if (waitingUsers.length >= 2) {
-      console.log(`[attemptMatch] More users waiting, recursively matching...`);
       attemptMatch();
     }
   }
 
-  // Function to create bot session for a single user
+  // Create bot session for single user
   function createBotSession(userId) {
     const realUser = waitingUsers.find(u => u.id === userId);
-    if (!realUser) {
-      console.log(`[Bot] User ${userId} not found in queue`);
-      return;
-    }
+    if (!realUser) return;
     
-    // Remove real user from queue
     const idx = waitingUsers.indexOf(realUser);
     if (idx > -1) waitingUsers.splice(idx, 1);
     
-    // Create bot user object
     const bot = {
       id: `bot-${Date.now()}`,
       isBot: true
     };
     
-    // Create session directly
     const sessionId = `${realUser.id}-${bot.id}`;
     const session = {
       id: sessionId,
@@ -252,7 +213,6 @@ app.prepare().then(() => {
     };
     activeSessions.set(sessionId, session);
     
-    // Notify the real user - they're matched with a bot!
     io.to(realUser.id).emit('match-found', {
       sessionId,
       partner: bot,
@@ -260,29 +220,29 @@ app.prepare().then(() => {
       isBotSession: true
     });
     
-    console.log(`[Bot] Bot session created for ${realUser.id}`);
+    console.log(`🤖 Bot session created for ${realUser.id}`);
   }
 
-  // Periodically check for matches for all waiting users - more aggressive checking
+  // Periodically check for matches
   setInterval(() => {
-    // First update queue positions - send to ALL waiting users with logging
+    // Update queue positions
     waitingUsers.forEach((user, index) => {
-      const position = index + 1;
-      io.to(user.id).emit('waiting', { position });
-      console.log(`[Queue] Sending position ${position} to user ${user.id}`);
+      io.to(user.id).emit('waiting', { position: index + 1 });
     });
     
-    // Try to match - call attemptMatch for each pair
+    // Try to match
     if (waitingUsers.length >= 2) {
-      console.log(`[Interval] Queue has ${waitingUsers.length} users, attempting match NOW`);
       attemptMatch();
-      // Try multiple times for reliability
-      setTimeout(attemptMatch, 50);
-      setTimeout(attemptMatch, 100);
-      setTimeout(attemptMatch, 200);
-      setTimeout(attemptMatch, 500);
     }
-  }, 500); // Check every 500ms - more aggressive matching
+    
+    // Bot fallback - if single user for 5 seconds
+    if (waitingUsers.length === 1) {
+      const user = waitingUsers[0];
+      if (Date.now() - user.joinedAt > 5000) {
+        createBotSession(user.id);
+      }
+    }
+  }, 1000);
 
   // Handle all other routes with Next.js
   server.all('*', (req, res) => {
@@ -292,6 +252,6 @@ app.prepare().then(() => {
   const PORT = process.env.PORT || 3000;
   httpServer.listen(PORT, (err) => {
     if (err) throw err;
-    console.log(`> Ready on http://localhost:${PORT}`);
+    console.log(`🌐 Ready on http://localhost:${PORT}`);
   });
 });

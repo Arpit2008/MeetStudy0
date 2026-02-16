@@ -1,5 +1,7 @@
 "use client";
 
+/* eslint-disable react-hooks/preserve-manual-memoization */
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
@@ -19,22 +21,14 @@ interface SessionData {
   isBotSession?: boolean;
 }
 
-// Ice servers for WebRTC - Using reliable free STUN + TURN servers
+// Ice servers for WebRTC - Using reliable free STUN servers
 const iceServers = [
-  // Google STUN servers (most reliable)
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun3.l.google.com:19302" },
   { urls: "stun:stun4.l.google.com:19302" },
-  // Twilio free STUN
   { urls: "stun:global.stun.twilio.com:3478" },
-  // OpenRelay TURN (free, no registration needed)
-  { 
-    urls: "turn:openrelay.metered.ca:80", 
-    username: "openrelayproject", 
-    credential: "openrelayproject" 
-  }
 ];
 
 export default function StudyBuddyConnect() {
@@ -62,7 +56,6 @@ export default function StudyBuddyConnect() {
   const [hasLocalStream, setHasLocalStream] = useState(false);
   const [isPeerConnected, setIsPeerConnected] = useState(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
-  const connectionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // Refs
   const socketRef = useRef<Socket | null>(null);
@@ -79,11 +72,6 @@ export default function StudyBuddyConnect() {
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
 
-  // Get actual duration - default 30 minutes
-  const getActualDuration = useCallback(() => {
-    return 30; // Default 30 minutes
-  }, []);
-
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
     setIsDarkMode((prev) => {
@@ -99,49 +87,108 @@ export default function StudyBuddyConnect() {
     });
   }, []);
 
-  // End session function
-  const endSession = useCallback(() => {
-    // Stop timer
-    if (timerRef.current) clearInterval(timerRef.current);
+  // Initialize Socket.io - simplified and more reliable
+  const initSocket = useCallback(() => {
+    if (!socketRef.current) {
+      // Get the current server URL - use localhost in development
+      const serverUrl = typeof window !== 'undefined' 
+        ? (window.location.origin || 'http://localhost:3000') 
+        : 'http://localhost:3000';
+      
+      console.log("🔌 Connecting to socket server:", serverUrl);
+      
+      socketRef.current = io(serverUrl, {
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 2000,
+        timeout: 15000,
+        transports: ['websocket', 'polling'],
+      });
 
-    // Stop local stream
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
+      socketRef.current.on("connect", () => {
+        console.log("✅ Connected to server! Socket ID:", socketRef.current?.id);
+      });
+
+      socketRef.current.on("connect_error", (error) => {
+        console.error("❌ Connection error:", error.message);
+        setConnectionError("Could not connect to server. Please refresh and try again.");
+      });
+
+      socketRef.current.on("disconnect", (reason) => {
+        console.log("Disconnected:", reason);
+      });
+
+      socketRef.current.on("reconnect", (attempt) => {
+        console.log("Reconnected after", attempt, "attempts");
+      });
     }
+    return socketRef.current;
+  }, []);
 
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
+  // Wait for socket to be ready before emitting events
+  const waitForSocket = useCallback((socket: Socket, callback: () => void, maxWait = 10000) => {
+    if (socket.connected) {
+      callback();
+      return;
     }
+    
+    const startTime = Date.now();
+    const checkConnection = () => {
+      if (socket.connected) {
+        callback();
+        return;
+      }
+      
+      if (Date.now() - startTime > maxWait) {
+        console.error("Timeout waiting for socket connection");
+        setConnectionError("Connection timeout. Please refresh and try again.");
+        setCurrentView("landing");
+        return;
+      }
+      
+      setTimeout(checkConnection, 100);
+    };
+    
+    checkConnection();
+  }, []);
 
-    // Reset state
-    setHasLocalStream(false);
-    setIsPeerConnected(false);
-    setCurrentView("landing");
-    setSessionData(null);
-    setTimeRemaining(0);
-    setIsPaused(false);
-    setIsCameraMuted(false);
-    setIsMicMuted(false);
-    setChatMessages([]);
+  // WebRTC handlers
+  const createPeerConnection = useCallback(() => {
+    const pc = new RTCPeerConnection({ iceServers });
+    
+    pc.onicecandidate = (event) => {
+      if (event.candidate && socketRef.current?.connected) {
+        socketRef.current.emit("ice-candidate", {
+          sessionId: sessionData?.sessionId,
+          candidate: event.candidate,
+          targetId: sessionData?.partner.id,
+        });
+      }
+    };
+    
+    pc.ontrack = (event) => {
+      console.log("Received remote track:", event.streams[0]);
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = event.streams[0];
+      }
+      setIsPeerConnected(true);
+    };
+    
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE Connection State:", pc.iceConnectionState);
+      if (pc.iceConnectionState === 'connected') {
+        setIsPeerConnected(true);
+      }
+    };
+    
+    peerConnectionRef.current = pc;
+    return pc;
+  }, []);
 
-    // Notify server
-    if (socketRef.current && sessionData) {
-      socketRef.current.emit("end-session", { sessionId: sessionData.sessionId });
-    }
-  }, [sessionData]);
-
-  // Update ref when endSession changes
-  useEffect(() => {
-    endSessionRef.current = endSession;
-  }, [endSession]);
-
-  // WebRTC Functions
-  const startWebRTC = useCallback(async (data: SessionData) => {
+  const startWebRTC = useCallback(async (isInitiator: boolean) => {
     try {
-      // Get local media stream - always video now
+      console.log("🎥 Starting WebRTC, isInitiator:", isInitiator);
+      
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
@@ -153,247 +200,219 @@ export default function StudyBuddyConnect() {
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
       }
-
-      // ICE server configuration - using reliable free STUN + TURN servers
-      const pcConfig = {
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-          { urls: "stun:stun2.l.google.com:19302" },
-          { urls: "stun:stun3.l.google.com:19302" },
-          { urls: "stun:stun4.l.google.com:19302" },
-          { urls: "stun:global.stun.twilio.com:3478" },
-          // OpenRelay TURN (free, no registration needed)
-          { 
-            urls: "turn:openrelay.metered.ca:80", 
-            username: "openrelayproject", 
-            credential: "openrelayproject" 
-          }
-        ],
-        iceCandidatePoolSize: 10
-      };
       
-      // Create peer connection
-      const pc = new RTCPeerConnection(pcConfig);
-      peerConnectionRef.current = pc;
-
-      // Add local tracks
-      stream.getTracks().forEach((track) => {
+      const pc = createPeerConnection();
+      
+      stream.getTracks().forEach(track => {
         pc.addTrack(track, stream);
       });
-
-      // Handle incoming tracks
-      pc.ontrack = (event) => {
-        setIsPeerConnected(true);
-        if (remoteVideoRef.current && event.streams[0]) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
-
-      // Handle ICE connection state changes for debugging
-      pc.oniceconnectionstatechange = () => {
-        console.log("ICE Connection State:", pc.iceConnectionState);
+      
+      if (isInitiator) {
+        const dataChannel = pc.createDataChannel("chat");
+        dataChannelRef.current = dataChannel;
         
-        // Clear timeout on any state change
-        if (connectionTimeoutRef.current) {
-          clearTimeout(connectionTimeoutRef.current);
-        }
+        dataChannel.onmessage = (event) => {
+          const msg = event.data;
+          setChatMessages(prev => [...prev, { sender: "Partner", text: msg }]);
+        };
         
-        if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-          setIsPeerConnected(true);
-          setConnectionError(null);
-          console.log("✅ Peer connected!");
-        }
-        if (pc.iceConnectionState === "failed") {
-          console.log("❌ ICE Connection failed, attempting restart...");
-          pc.restartIce();
-        }
-        if (pc.iceConnectionState === "disconnected") {
-          console.log("⚠️ ICE Connection disconnected, attempting restart...");
-          pc.restartIce();
-        }
-      };
-
-      // Handle ICE candidates - use data parameter, not sessionData state
-      pc.onicecandidate = (event) => {
-        if (event.candidate && socketRef.current) {
-          // Send ICE candidate to peer through signaling server
-          socketRef.current.emit("ice-candidate", {
-            sessionId: data.sessionId,
-            candidate: event.candidate,
-            targetId: data.partner.id,
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        if (socketRef.current?.connected) {
+          socketRef.current.emit("webrtc-offer", {
+            sessionId: sessionData?.sessionId,
+            offer: pc.localDescription,
+            targetId: sessionData?.partner.id,
           });
         }
-      };
+      }
+    } catch (error) {
+      console.error("Error starting WebRTC:", error);
+    }
+  }, []);
 
-      // Create data channel for chat (always available for text communication)
-      const channel = pc.createDataChannel("chat");
-      dataChannelRef.current = channel;
-      
-      channel.onmessage = (event) => {
-        const message = JSON.parse(event.data);
-        setChatMessages((prev) => [...prev, message]);
-      };
+  const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string }) => {
+    console.log("📨 Handling WebRTC offer from:", data.from);
+    
+    try {
+      const pc = createPeerConnection();
       
       pc.ondatachannel = (event) => {
         dataChannelRef.current = event.channel;
         event.channel.onmessage = (e) => {
-          const message = JSON.parse(e.data);
-          setChatMessages((prev) => [...prev, message]);
+          setChatMessages(prev => [...prev, { sender: "Partner", text: e.data }]);
         };
       };
-
-      // If initiator, create offer
-      if (data.isInitiator) {
-        console.log("Creating WebRTC offer as initiator...");
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        socketRef.current?.emit("webrtc-offer", {
-          sessionId: data.sessionId,
-          offer,
-          targetId: data.partner.id,
+      
+      await pc.setRemoteDescription(data.offer);
+      
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      
+      if (socketRef.current?.connected) {
+        socketRef.current.emit("webrtc-answer", {
+          sessionId: sessionData?.sessionId,
+          answer: pc.localDescription,
+          targetId: data.from,
         });
-        console.log("WebRTC offer sent");
       }
     } catch (error) {
-      console.error("Error starting WebRTC:", error);
-      alert("Could not access camera/microphone. Please check permissions.");
-      endSessionRef.current();
-    }
-  }, []);
-
-  const handleWebRTCOffer = useCallback(async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
-    try {
-      console.log("Received WebRTC offer from:", data.from);
-      
-      // First, get local stream BEFORE creating peer connection
-      let stream = localStreamRef.current;
-      if (!stream) {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-        localStreamRef.current = stream;
-        setHasLocalStream(true);
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-      }
-
-      // Create peer connection if not exists
-      if (!peerConnectionRef.current) {
-        const pcConfig = {
-          iceServers: [
-            { urls: "stun:stun.l.google.com:19302" },
-            { urls: "stun:stun1.l.google.com:19302" },
-            { urls: "stun:stun2.l.google.com:19302" },
-            { urls: "stun:stun3.l.google.com:19302" },
-            { urls: "stun:stun4.l.google.com:19302" },
-            { urls: "stun:global.stun.twilio.com:3478" },
-            // OpenRelay TURN (free, no registration needed)
-            { 
-              urls: "turn:openrelay.metered.ca:80", 
-              username: "openrelayproject", 
-              credential: "openrelayproject" 
-            }
-          ],
-          iceCandidatePoolSize: 10
-        };
-        const pc = new RTCPeerConnection(pcConfig);
-        peerConnectionRef.current = pc;
-
-        // Handle ICE connection state changes FIRST
-        pc.oniceconnectionstatechange = () => {
-          console.log("ICE Connection State (receiver):", pc.iceConnectionState);
-          if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
-            setIsPeerConnected(true);
-            setConnectionError(null);
-            console.log("✅ Peer connected (receiver)!");
-          }
-          if (pc.iceConnectionState === "failed") {
-            console.log("❌ ICE failed on receiver, restarting...");
-            pc.restartIce();
-          }
-          if (pc.iceConnectionState === "disconnected") {
-            console.log("⚠️ ICE disconnected on receiver, restarting...");
-            pc.restartIce();
-          }
-        };
-
-        // Handle incoming tracks
-        pc.ontrack = (event) => {
-          console.log("Received remote track");
-          setIsPeerConnected(true);
-          if (remoteVideoRef.current && event.streams[0]) {
-            remoteVideoRef.current.srcObject = event.streams[0];
-          }
-        };
-
-        // Handle data channel for chat
-        pc.ondatachannel = (event) => {
-          console.log("Data channel received");
-          dataChannelRef.current = event.channel;
-          event.channel.onmessage = (e) => {
-            const message = JSON.parse(e.data);
-            setChatMessages((prev) => [...prev, message]);
-          };
-        };
-
-        // Handle ICE candidates - use 'from' from the offer
-        pc.onicecandidate = (event) => {
-          if (event.candidate && socketRef.current) {
-            socketRef.current.emit("ice-candidate", {
-              sessionId: data.sessionId,
-              candidate: event.candidate,
-              targetId: data.from, // Use 'from' from the offer data
-            });
-          }
-        };
-
-        // Add local tracks
-        stream.getTracks().forEach((track) => {
-          pc.addTrack(track, stream!);
-        });
-      }
-
-      // Set remote description and create answer
-      await peerConnectionRef.current.setRemoteDescription(data.offer);
-      const answer = await peerConnectionRef.current.createAnswer();
-      await peerConnectionRef.current.setLocalDescription(answer);
-
-      socketRef.current?.emit("webrtc-answer", {
-        sessionId: data.sessionId,
-        answer,
-        targetId: data.from,
-      });
-      
-      console.log("Sent WebRTC answer");
-    } catch (error) {
-      console.error("Error handling offer:", error);
+      console.error("Error handling WebRTC offer:", error);
     }
   }, []);
 
   const handleWebRTCAnswer = useCallback(async (data: { answer: RTCSessionDescriptionInit; from: string }) => {
+    console.log("📨 Handling WebRTC answer from:", data.from);
+    
     try {
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.setRemoteDescription(data.answer);
-      }
+      await peerConnectionRef.current?.setRemoteDescription(data.answer);
     } catch (error) {
-      console.error("Error handling answer:", error);
+      console.error("Error handling WebRTC answer:", error);
     }
   }, []);
 
   const handleIceCandidate = useCallback(async (data: { candidate: RTCIceCandidateInit; from: string }) => {
     try {
-      if (peerConnectionRef.current) {
-        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-      }
+      await peerConnectionRef.current?.addIceCandidate(data.candidate);
     } catch (error) {
       console.error("Error adding ICE candidate:", error);
     }
   }, []);
+
+  // End session
+  const endSession = useCallback(() => {
+    console.log("Ending session");
+    
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(track => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    
+    if (socketRef.current?.connected) {
+      socketRef.current.emit("end-session", { sessionId: sessionData?.sessionId });
+    }
+    
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    
+    setSessionData(null);
+    setTimeRemaining(0);
+    setHasLocalStream(false);
+    setIsPeerConnected(false);
+    setCurrentView("landing");
+    setShowCompletionModal(false);
+    setChatMessages([]);
+  }, [sessionData?.sessionId]);
+
+  // Set up endSession ref
+  useEffect(() => {
+    endSessionRef.current = endSession;
+  }, [endSession]);
+
+  // Set up socket event listeners
+  useEffect(() => {
+    const socket = initSocket();
+    
+    socket.on("waiting", (data: { position: number }) => {
+      console.log("📍 Waiting in queue, position:", data.position);
+      setSearchPosition(data.position);
+    });
+
+    socket.on("match-found", async (data: SessionData) => {
+      console.log("🎉 Match found!", data);
+      setSessionData(data);
+      setCurrentView("session");
+      setTimeRemaining(30 * 60);
+      
+      // Check if bot session
+      if (data.isBotSession) {
+        console.log("🤖 Bot session - getting local stream");
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: true,
+          });
+          localStreamRef.current = stream;
+          setHasLocalStream(true);
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          if (remoteVideoRef.current) {
+            remoteVideoRef.current.srcObject = stream;
+          }
+          setIsPeerConnected(true);
+          console.log("🤖 Bot session ready");
+        } catch (err) {
+          console.error("Error getting local stream for bot:", err);
+        }
+        return;
+      }
+      
+      // Start WebRTC for real user
+      await startWebRTC(data.isInitiator);
+    });
+
+    socket.on("webrtc-offer", handleWebRTCOffer);
+    socket.on("webrtc-answer", handleWebRTCAnswer);
+    socket.on("ice-candidate", handleIceCandidate);
+
+    socket.on("session-ended", (data: { reason: string }) => {
+      console.log("Session ended:", data.reason);
+      endSession();
+    });
+
+    return () => {
+      socket.off("waiting");
+      socket.off("match-found");
+      socket.off("webrtc-offer");
+      socket.off("webrtc-answer");
+      socket.off("ice-candidate");
+      socket.off("session-ended");
+    };
+  }, [initSocket, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, startWebRTC, endSession]);
+
+  // Timer
+  useEffect(() => {
+    if (currentView === "session" && timeRemaining > 0 && !isPaused) {
+      timerRef.current = setInterval(() => {
+        setTimeRemaining(prev => {
+          if (prev <= 1) {
+            setShowCompletionModal(true);
+            if (timerRef.current) clearInterval(timerRef.current);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [currentView, isPaused, timeRemaining]);
+
+  // Find partner
+  const findPartner = useCallback(() => {
+    const socket = initSocket();
+    setCurrentView("searching");
+    setConnectionError(null);
+    
+    // Wait for socket to be ready before joining queue
+    waitForSocket(socket, () => {
+      if (socket.id) {
+        socket.emit("join-queue", { id: socket.id });
+      }
+    });
+  }, [initSocket, waitForSocket]);
 
   // Toggle camera
   const toggleCamera = useCallback(() => {
@@ -417,490 +436,235 @@ export default function StudyBuddyConnect() {
     }
   }, []);
 
+  // Toggle pause
+  const togglePause = useCallback(() => {
+    setIsPaused(prev => !prev);
+  }, []);
+
   // Send chat message
   const sendChatMessage = useCallback(() => {
-    if (chatInput.trim() && dataChannelRef.current) {
-      const message = { sender: "You", text: chatInput.trim() };
-      dataChannelRef.current.send(JSON.stringify(message));
-      setChatMessages((prev) => [...prev, message]);
+    if (chatInput.trim() && dataChannelRef.current?.readyState === "open") {
+      dataChannelRef.current.send(chatInput);
+      setChatMessages(prev => [...prev, { sender: "You", text: chatInput }]);
       setChatInput("");
     }
   }, [chatInput]);
-
-  // Initialize dark mode from localStorage
-  const initializeDarkMode = useCallback(() => {
-    const savedTheme = localStorage.getItem("studybuddy-theme");
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
-      return true;
-    }
-    return false;
-  }, []);
-
-  // Initialize Socket.io
-  const initSocket = useCallback(() => {
-    if (!socketRef.current) {
-      // Get the current server URL
-      const serverUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      console.log("Connecting to socket server:", serverUrl);
-      
-      socketRef.current = io(serverUrl, {
-        autoConnect: true,
-        reconnection: true,
-        reconnectionAttempts: 20, // More retry attempts
-        reconnectionDelay: 500,   // Faster retry
-        reconnectionDelayMax: 3000,
-        timeout: 5000,
-        transports: ['websocket', 'polling'], // Try WebSocket first, fall back to polling
-      });
-
-      socketRef.current.on("connect", () => {
-        console.log("Connected to server:", socketRef.current?.id);
-      });
-
-      socketRef.current.on("connect_error", (error) => {
-        console.error("Socket connection error:", error.message);
-      });
-
-      socketRef.current.on("disconnect", (reason) => {
-        console.log("Disconnected from server:", reason);
-      });
-
-      socketRef.current.io.on("reconnect", (attempt) => {
-        console.log("Reconnected after", attempt, "attempts");
-      });
-
-      socketRef.current.io.on("reconnect_attempt", (attempt) => {
-        console.log("Reconnection attempt:", attempt);
-      });
-
-      socketRef.current.io.on("reconnect_error", (error) => {
-        console.error("Reconnection error:", error);
-      });
-
-      socketRef.current.io.on("reconnect_failed", () => {
-        console.error("Reconnection failed - server may be unreachable");
-        alert("Could not connect to server. Please check your internet connection and try again.");
-      });
-
-      socketRef.current.on("waiting", (data: { position: number }) => {
-        console.log("📍 Waiting in queue, position:", data.position);
-        setSearchPosition(data.position);
-      });
-
-      socketRef.current.on("match-found", async (data: SessionData) => {
-        console.log("🎉 Match found!", data);
-        setSessionData(data);
-        setCurrentView("session");
-        setTimeRemaining(30 * 60); // Default 30 minutes
-        
-        // Check if this is a bot session
-        if (data.isBotSession) {
-          console.log("🤖 Bot session - getting local stream");
-          try {
-            // Get local stream for bot session
-            const stream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: true,
-            });
-            localStreamRef.current = stream;
-            setHasLocalStream(true);
-            
-            if (localVideoRef.current) {
-              localVideoRef.current.srcObject = stream;
-            }
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = stream; // Mirror local to remote
-            }
-            setIsPeerConnected(true);
-            console.log("🤖 Bot session ready with local stream");
-          } catch (err) {
-            console.error("Error getting local stream for bot session:", err);
-          }
-          return;
-        }
-        
-        // Start WebRTC connection - always video
-        startWebRTC(data);
-      });
-
-      socketRef.current.on("webrtc-offer", async (data: { offer: RTCSessionDescriptionInit; from: string; sessionId: string }) => {
-        await handleWebRTCOffer(data);
-      });
-
-      socketRef.current.on("webrtc-answer", async (data: { answer: RTCSessionDescriptionInit; from: string }) => {
-        await handleWebRTCAnswer(data);
-      });
-
-      socketRef.current.on("ice-candidate", async (data: { candidate: RTCIceCandidateInit; from: string }) => {
-        await handleIceCandidate(data);
-      });
-
-      socketRef.current.on("session-ended", (data: { reason: string }) => {
-        console.log("Session ended:", data.reason);
-        endSession();
-      });
-    }
-    return socketRef.current;
-  }, [startWebRTC, handleWebRTCOffer, handleWebRTCAnswer, handleIceCandidate, endSession]);
-
-  // Find partner - simplified with better connection handling
-  const findPartner = useCallback(() => {
-    const socket = initSocket();
-    setCurrentView("searching");
-
-    // Wait for socket to be connected before emitting - with better timeout handling
-    let attempts = 0;
-    const maxAttempts = 50; // 10 seconds max wait (200ms * 50)
-    const emitJoinQueue = () => {
-      attempts++;
-      
-      if (attempts > maxAttempts) {
-        console.log("Timeout waiting for socket connection");
-        alert("Could not connect to server. Please try again.");
-        setCurrentView("landing");
-        return;
-      }
-      
-      if (!socket.connected) {
-        console.log("Socket not connected, waiting... attempt", attempts);
-        setTimeout(emitJoinQueue, 200);
-        return;
-      }
-      
-      // Use socket.id for reliable identification
-      if (!socket.id) {
-        console.log("Socket ID not available yet, waiting...");
-        setTimeout(emitJoinQueue, 200);
-        return;
-      }
-      
-      const userData: UserData = {
-        id: socket.id,
-      };
-
-      console.log("Socket connected (id:", socket.id, "), joining queue");
-      socket.emit("join-queue", userData);
-    };
-    
-    emitJoinQueue();
-  }, [initSocket]);
-
-  // Cancel search
-  const cancelSearch = useCallback(() => {
-    if (socketRef.current) {
-      socketRef.current.emit("leave-queue");
-    }
-    setCurrentView("landing");
-  }, []);
-
-  // Timer
-  useEffect(() => {
-    if (currentView === "session" && timeRemaining > 0 && !isPaused) {
-      timerRef.current = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            setShowCompletionModal(true);
-            if (timerRef.current) clearInterval(timerRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-    }
-
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [currentView, isPaused, timeRemaining]);
 
   // Format time
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Close completion modal
-  const closeCompletionModal = useCallback(() => {
-    setShowCompletionModal(false);
-    endSession();
-  }, [endSession]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((track) => track.stop());
-      }
-      if (peerConnectionRef.current) {
-        peerConnectionRef.current.close();
-      }
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-    };
-  }, []);
-
   return (
-    <div className={`min-h-screen ${isDarkMode ? "dark bg-slate-900" : "bg-gradient-to-b from-sky-100 via-sky-50 to-white"}`}>
-      {/* Background Shapes */}
-      <div className="bg-shapes">
-        <div className="shape shape-1"></div>
-        <div className="shape shape-2"></div>
-        <div className="shape shape-3"></div>
-      </div>
+    <div className={`min-h-screen ${isDarkMode ? 'dark bg-slate-900' : 'bg-gradient-to-br from-sky-100 to-indigo-100'}`}>
+      <div className="min-h-screen transition-colors duration-300">
+        {/* Header */}
+        <header className="p-4 flex justify-between items-center">
+          <h1 className={`text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+            StudyBuddy Connect 🎓
+          </h1>
+          <button
+            onClick={toggleDarkMode}
+            className={`p-2 rounded-full ${isDarkMode ? 'bg-slate-700 text-yellow-300' : 'bg-white text-indigo-600'} shadow-lg hover:scale-110 transition-transform`}
+          >
+            {isDarkMode ? '☀️' : '🌙'}
+          </button>
+        </header>
 
-      {/* Dark Mode Toggle */}
-      <button
-        onClick={toggleDarkMode}
-        className="dark-toggle control-btn"
-        title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
-      >
-        {isDarkMode ? (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        ) : (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-          </svg>
-        )}
-      </button>
-
-      {/* Main Content */}
-      <main className="relative min-h-screen flex flex-col items-center justify-center p-4 sm:p-6">
-        
-        {/* Landing View */}
-        {currentView === "landing" && (
-          <div className="w-full max-w-md animate-fade-in-up">
-            {/* Header */}
-            <div className="text-center mb-8">
-              <h1 className="text-4xl sm:text-5xl font-bold mb-3 bg-gradient-to-r from-sky-500 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                StudyBuddy Connect
-              </h1>
-              <p className={`text-lg ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                Find your perfect study partner instantly
-              </p>
+        {/* Main Content */}
+        <main className="container mx-auto px-4 py-8">
+          {connectionError && (
+            <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
+              {connectionError}
             </div>
-
-            {/* Simple Find Partner Panel */}
-            <div className="glass rounded-3xl p-8 text-center">
-              <div className="text-6xl mb-4">🎓</div>
-              <p className="text-white/80 mb-6">
-                Connect instantly with a random study partner for a 30-minute video session
+          )}
+          
+          {/* Landing View */}
+          {currentView === "landing" && (
+            <div className="text-center py-20">
+              <div className="mb-8">
+                <span className="text-8xl">📚</span>
+              </div>
+              <h2 className={`text-5xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                Find Your Study Partner
+              </h2>
+              <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                Connect via video with fellow students for focused study sessions
               </p>
-              
-              {/* Find Partner Button */}
               <button
                 onClick={findPartner}
-                className="w-full gradient-btn py-5 rounded-xl text-white font-bold text-xl shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
+                className="px-12 py-4 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xl font-semibold rounded-full shadow-xl hover:from-indigo-600 hover:to-purple-600 hover:scale-105 transition-all duration-300"
               >
-                <span className="flex items-center justify-center gap-3">
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                  Find a Study Partner
-                </span>
+                Find a Study Partner
               </button>
-              
-              <p className="text-white/50 text-sm mt-4">
-                🔒 No login required • 100% private
+              <p className={`mt-4 text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                🔒 100% Private • No Login Required • Video Sessions
               </p>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Searching View */}
-        {currentView === "searching" && (
-          <div className="text-center animate-fade-in-up">
-            <div className="glass rounded-3xl p-12">
-              {/* Animated Search Icon */}
-              <div className="flex justify-center mb-8">
-                <div className="relative">
-                  <div className="w-24 h-24 flex items-center justify-center">
-                    <div className="spinner"></div>
-                  </div>
-                  <svg
-                    className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-12 h-12 text-sky-400"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                    />
-                  </svg>
-                </div>
+          {/* Searching View */}
+          {currentView === "searching" && (
+            <div className="text-center py-20">
+              <div className="mb-8">
+                <div className="inline-block text-8xl animate-bounce">🔍</div>
               </div>
-
-              <h2 className="text-2xl font-semibold text-white mb-3">
-                Searching for a Study Partner...
+              <h2 className={`text-4xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                Finding Your Study Partner...
               </h2>
-              <p className={`text-lg mb-6 ${isDarkMode ? "text-slate-400" : "text-slate-600"}`}>
-                Position in queue: <span className="text-sky-400 font-bold">{searchPosition}</span>
+              <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                Position in queue: <span className="font-bold text-indigo-500">{searchPosition}</span>
               </p>
-              <p className={`text-sm mb-8 ${isDarkMode ? "text-slate-500" : "text-slate-500"}`}>
-                Looking for a study partner... •
-                <span className="text-white">30 min video session</span>
-              </p>
-
+              <div className="flex justify-center gap-2 mb-8">
+                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse"></div>
+                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse delay-100"></div>
+                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse delay-200"></div>
+              </div>
               <button
-                onClick={cancelSearch}
-                className="px-8 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-all"
+                onClick={() => {
+                  socketRef.current?.emit("leave-queue");
+                  setCurrentView("landing");
+                }}
+                className="px-8 py-3 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors"
               >
                 Cancel
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Session View */}
-        {currentView === "session" && (
-          <div className="w-full h-screen flex flex-col animate-fade-in-up p-4">
-            {/* Timer Bar */}
-            <div className="flex justify-center mb-4">
-              <div className="glass rounded-full px-6 py-3 flex items-center gap-4">
-                <span className="text-white/70">Time Remaining:</span>
-                <span className={`timer-display text-2xl font-bold text-white ${timeRemaining < 60 ? "text-red-400" : "text-sky-400"}`}>
-                  {formatTime(timeRemaining)}
+          {/* Session View */}
+          {currentView === "session" && (
+            <div className="max-w-6xl mx-auto">
+              {/* Timer */}
+              <div className="text-center mb-4">
+                <span className={`text-2xl font-bold ${isPaused ? 'text-yellow-500' : isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                  ⏱️ {formatTime(timeRemaining)}
                 </span>
-                <button
-                  onClick={() => setIsPaused(!isPaused)}
-                  className="p-2 rounded-full hover:bg-white/10 transition-all"
-                  title={isPaused ? "Resume" : "Pause"}
-                >
-                  {isPaused ? (
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                {isPaused && <span className="ml-2 text-yellow-500">(Paused)</span>}
+              </div>
+
+              {/* Video Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                {/* Local Video */}
+                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black aspect-video">
+                  <video
+                    ref={localVideoRef}
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
+                    You {isCameraMuted && '📷'}
+                  </div>
+                </div>
+                
+                {/* Remote Video */}
+                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black aspect-video">
+                  <video
+                    ref={remoteVideoRef}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
+                    Partner {sessionData?.isBotSession && '🤖'}
+                  </div>
+                  {!isPeerConnected && !sessionData?.isBotSession && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                      <p className="text-white">Connecting...</p>
+                    </div>
                   )}
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex justify-center gap-4">
+                <button
+                  onClick={toggleCamera}
+                  className={`p-4 rounded-full ${isCameraMuted ? 'bg-red-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
+                >
+                  {isCameraMuted ? '📷' : '📹'}
+                </button>
+                <button
+                  onClick={toggleMic}
+                  className={`p-4 rounded-full ${isMicMuted ? 'bg-red-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
+                >
+                  {isMicMuted ? '🔇' : '🎤'}
+                </button>
+                <button
+                  onClick={togglePause}
+                  className={`p-4 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
+                >
+                  {isPaused ? '▶️' : '⏸️'}
+                </button>
+                <button
+                  onClick={endSession}
+                  className="p-4 rounded-full bg-red-500 text-white hover:scale-110 transition-transform"
+                >
+                  📞
                 </button>
               </div>
-            </div>
 
-            {/* Video/Chat Grid */}
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-              {/* My Video */}
-              <div className="video-container relative min-h-[300px]">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="mirror w-full h-full"
-                />
-                {!hasLocalStream ? (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <div className="w-20 h-20 mx-auto mb-4 rounded-full bg-sky-500/20 flex items-center justify-center">
-                        <span className="text-3xl">👤</span>
+              {/* Chat */}
+              <div className="mt-4 max-w-md mx-auto">
+                <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-lg`}>
+                  <h3 className={`font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Chat</h3>
+                  <div 
+                    ref={chatMessagesRef}
+                    className="h-32 overflow-y-auto mb-2 space-y-1"
+                  >
+                    {chatMessages.map((msg, i) => (
+                      <div key={i} className={`text-sm ${msg.sender === 'You' ? 'text-indigo-500' : isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                        <span className="font-bold">{msg.sender}:</span> {msg.text}
                       </div>
-                      <p className="text-white/70">You</p>
-                    </div>
+                    ))}
                   </div>
-                ) : null}
-                <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-1">
-                  <span className="text-white text-sm">You</span>
-                </div>
-                {isCameraMuted && (
-                  <div className="absolute top-4 right-4 bg-red-500/80 rounded-full p-2">
-                    <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => setChatInput(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                      placeholder="Type a message..."
+                      className={`flex-1 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 text-white border-slate-600' : 'border-gray-300'}`}
+                    />
+                    <button
+                      onClick={sendChatMessage}
+                      className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
+                    >
+                      Send
+                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Partner Video */}
-              <div className="video-container relative min-h-[300px]">
-                <video
-                  ref={remoteVideoRef}
-                  autoPlay
-                  playsInline
-                  className="w-full h-full"
-                />
-                <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-1">
-                  <span className="text-white text-sm">Partner</span>
                 </div>
               </div>
             </div>
+          )}
+        </main>
 
-            {/* Controls */}
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={toggleCamera}
-                className={`control-btn ${isCameraMuted ? "muted" : ""}`}
-                title={isCameraMuted ? "Turn on camera" : "Turn off camera"}
-              >
-                {isCameraMuted ? (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                )}
-              </button>
-              <button
-                onClick={toggleMic}
-                className={`control-btn ${isMicMuted ? "muted" : ""}`}
-                title={isMicMuted ? "Unmute" : "Mute"}
-              >
-                {isMicMuted ? (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
-                  </svg>
-                ) : (
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-                  </svg>
-                )}
-              </button>
+        {/* Completion Modal */}
+        {showCompletionModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+            <div className={`rounded-2xl p-8 max-w-md text-center ${isDarkMode ? 'bg-slate-800' : 'bg-white'}`}>
+              <div className="text-6xl mb-4">🎉</div>
+              <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                Session Complete!
+              </h2>
+              <p className={`mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                Great work! You completed a focused study session.
+              </p>
               <button
                 onClick={endSession}
-                className="control-btn !bg-red-500 hover:!bg-red-600"
-                title="End Session"
+                className="px-8 py-3 bg-indigo-500 text-white rounded-full hover:bg-indigo-600 transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2M5 3a2 2 0 00-2 2v1c0 8.284 6.716 15 15 15h1a2 2 0 002-2v-3.28a1 1 0 00-.684-.948l-4.493-1.498a1 1 0 00-1.21.502l-1.13 2.257a11.042 11.042 0 01-5.516-5.517l2.257-1.128a1 1 0 00.502-1.21L9.228 3.683A1 1 0 008.279 3H5z" />
-                </svg>
+                Back to Home
               </button>
             </div>
           </div>
         )}
-      </main>
-
-      {/* Completion Modal */}
-      {showCompletionModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="text-6xl mb-4">🎉</div>
-            <h2 className="text-2xl font-bold text-white mb-3">
-              Great Job!
-            </h2>
-            <p className="text-white/70 mb-6">
-              You completed your study session. Keep up the great work!
-            </p>
-            <button
-              onClick={closeCompletionModal}
-              className="gradient-btn px-8 py-3 rounded-xl text-white font-semibold"
-            >
-              Back to Home
-            </button>
-          </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
