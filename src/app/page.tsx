@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import Peer, { MediaConnection } from "peerjs";
+import PartySocket from "partysocket";
 
 // Types
 interface SessionData {
@@ -21,8 +21,8 @@ const iceServers = [
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
 
-// PeerJS configuration - Using free cloud server for signaling
-const PEERJS_API_KEY = "studybuddy-connect-v1";
+// PartyKit server URL - uses your deployed PartyKit server
+const PARTYKIT_HOST = "studybuddy-connect.claude.partykit.dev";
 
 export default function StudyBuddyConnect() {
   // App states
@@ -53,8 +53,8 @@ export default function StudyBuddyConnect() {
   const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
   
   // Refs
-  const peerRef = useRef<Peer | null>(null);
-  const mediaConnRef = useRef<MediaConnection | null>(null);
+  const partySocketRef = useRef<PartySocket | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -67,7 +67,10 @@ export default function StudyBuddyConnect() {
 
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
-  const handlePartnerConnectionRef = useRef<any>(null);
+  const handleMatchFoundRef = useRef<any>(null);
+  const handleWebRTCOfferRef = useRef<any>(null);
+  const handleWebRTCAnswerRef = useRef<any>(null);
+  const handleICECandidateRef = useRef<any>(null);
 
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -114,122 +117,218 @@ export default function StudyBuddyConnect() {
     });
   }, []);
 
-  // Find partner using PeerJS (reliable cloud signaling)
+  // Find partner using PartyKit + WebRTC
   const findPartner = useCallback(() => {
     setCurrentView("searching");
     setConnectionError(null);
     setIsConnecting(true);
     setSearchStatus("Looking for study partners...");
     
-    // Generate a unique room ID
-    const roomId = `study_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    console.log("🔍 Creating PeerJS connection...");
+    console.log("🔌 Connecting to PartyKit server...");
     
     try {
-      // Create peer with a random ID
-      const peer = new Peer({
-        debug: 2
+      // Connect to PartyKit server
+      const partySocket = new PartySocket({
+        host: PARTYKIT_HOST,
+        room: "studybuddy-room",
       });
-      peerRef.current = peer;
+      partySocketRef.current = partySocket;
       
-      peer.on('open', (id) => {
-        console.log("📡 My PeerJS ID:", id);
-        setSearchStatus("Waiting for a partner to join...");
+      // Listen for messages from server
+      partySocket.addEventListener("message", async (event) => {
+        const data = JSON.parse(event.data);
+        console.log("📨 Received message:", data.type);
         
-        // Listen for incoming connections (partner joining us)
-        peer.on('connection', (conn) => {
-          console.log("📨 Incoming connection from:", conn.peer);
-          if (handlePartnerConnectionRef.current) {
-            handlePartnerConnectionRef.current(conn);
-          }
-        });
-        
-        // For demo purposes, create a bot session if no one connects after 15 seconds
-        setTimeout(() => {
-          if (!sessionData && currentView === "searching") {
-            console.log("⏰ Timeout - creating bot session");
-            peer.destroy();
-            createBotSession();
-          }
-        }, 15000);
-      });
-      
-      peer.on('error', (err) => {
-        console.error("PeerJS error:", err);
-        if (err.type === 'network' || err.type === 'server-error') {
-          setConnectionError("Connection failed. Please try again.");
-          setIsConnecting(false);
-          setCurrentView("landing");
+        switch (data.type) {
+          case "waiting":
+            setSearchStatus(`Waiting in queue... (Position: ${data.position})`);
+            break;
+            
+          case "match-found":
+            console.log("🎉 Match found!", data);
+            setSearchStatus("Partner found! Connecting...");
+            if (handleMatchFoundRef.current) {
+              await handleMatchFoundRef.current(data);
+            }
+            break;
+            
+          case "webrtc-offer":
+            console.log("📨 Received WebRTC offer from", data.from);
+            if (handleWebRTCOfferRef.current) {
+              await handleWebRTCOfferRef.current(data);
+            }
+            break;
+            
+          case "webrtc-answer":
+            console.log("📨 Received WebRTC answer from", data.from);
+            if (handleWebRTCAnswerRef.current) {
+              await handleWebRTCAnswerRef.current(data);
+            }
+            break;
+            
+          case "ice-candidate":
+            console.log("📨 Received ICE candidate from", data.from);
+            if (handleICECandidateRef.current) {
+              await handleICECandidateRef.current(data);
+            }
+            break;
+            
+          case "session-ended":
+            console.log("Session ended:", data.reason);
+            endSessionRef.current();
+            break;
         }
       });
       
+      // Send join-queue message
+      partySocket.send(JSON.stringify({ type: "join-queue" }));
+      
     } catch (error) {
-      console.error("Error creating PeerJS peer:", error);
+      console.error("Error connecting to PartyKit:", error);
       setConnectionError("Could not connect. Please try again.");
       setIsConnecting(false);
       setCurrentView("landing");
     }
-  }, [sessionData, currentView, createBotSession]);
+  }, []);
 
-  // Handle partner connection
-  const handlePartnerConnection = useCallback((conn: any) => {
-    console.log("👋 Partner connected:", conn.peer);
-    setSearchStatus("Partner found! Connecting...");
+  // Handle match found - create WebRTC connection
+  const handleMatchFound = useCallback(async (data: any) => {
+    if (data.isBotSession) {
+      // Bot session - use local stream for both
+      createBotSession();
+      return;
+    }
+    
+    setCurrentView("session");
+    setSessionData({
+      sessionId: data.sessionId,
+      partnerId: data.partner.id
+    });
     setIsConnecting(false);
     setIsConnected(true);
     
-    // Create session
-    setSessionData({
-      sessionId: `session_${Date.now()}`,
-      partnerId: conn.peer
-    });
-    
-    // Get local stream
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        localStreamRef.current = stream;
-        setHasLocalStream(true);
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
-        }
-        
-        // Call the partner with our stream
-        const call = peerRef.current?.call(conn.peer, stream);
-        if (call) {
-          call.on('stream', (remoteStream) => {
-            console.log("📹 Received remote stream");
-            if (remoteVideoRef.current) {
-              remoteVideoRef.current.srcObject = remoteStream;
-            }
-            setIsPeerConnected(true);
-          });
-          call.on('close', () => {
-            console.log("📞 Call closed");
-            endSessionRef.current();
-          });
-        }
-      })
-      .catch(err => {
-        console.error("Error getting media devices:", err);
-      });
-    
-    // Handle chat messages
-    conn.on('data', (data: any) => {
-      if (data.type === 'chat') {
-        setChatMessages(prev => [...prev, { sender: "Partner", text: data.text }]);
+    // Get local media stream
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localStreamRef.current = stream;
+      setHasLocalStream(true);
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
       }
-    });
-    
-    // Store connection for sending messages
-    (window as any).__partnerConn = conn;
-  }, []);
+      
+      // Create RTCPeerConnection
+      const pc = new RTCPeerConnection({ iceServers });
+      peerConnectionRef.current = pc;
+      
+      // Add local stream tracks to connection
+      stream.getTracks().forEach(track => {
+        pc.addTrack(track, stream);
+      });
+      
+      // Handle incoming stream
+      pc.ontrack = (event) => {
+        console.log("📹 Received remote stream", event.streams[0]);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+        setIsPeerConnected(true);
+      };
+      
+      // Handle ICE candidates
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          partySocketRef.current?.send(JSON.stringify({
+            type: "ice-candidate",
+            targetId: data.partner.id,
+            candidate: event.candidate,
+            sessionId: data.sessionId
+          }));
+        }
+      };
+      
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log("Connection state:", pc.connectionState);
+        if (pc.connectionState === "connected") {
+          setIsPeerConnected(true);
+        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
+          console.log("Peer connection lost");
+        }
+      };
+      
+      // If initiator, create and send offer
+      if (data.isInitiator) {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        
+        partySocketRef.current?.send(JSON.stringify({
+          type: "webrtc-offer",
+          targetId: data.partner.id,
+          offer: pc.localDescription,
+          sessionId: data.sessionId
+        }));
+      }
+      
+      // Start timer
+      setTimeRemaining(30 * 60);
+      
+    } catch (error) {
+      console.error("Error getting media devices:", error);
+      setConnectionError("Could not access camera/microphone. Please check permissions.");
+    }
+  }, [createBotSession]);
 
-  // Set up handlePartnerConnection ref
-  useEffect(() => {
-    handlePartnerConnectionRef.current = handlePartnerConnection;
-  }, [handlePartnerConnection]);
+  // Handle incoming WebRTC offer
+  const handleWebRTCOffer = useCallback(async (data: any) => {
+    try {
+      if (!peerConnectionRef.current) {
+        console.error("No peer connection to handle offer");
+        return;
+      }
+      
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await peerConnectionRef.current.createAnswer();
+      await peerConnectionRef.current.setLocalDescription(answer);
+      
+      partySocketRef.current?.send(JSON.stringify({
+        type: "webrtc-answer",
+        targetId: data.from,
+        answer: peerConnectionRef.current.localDescription,
+        sessionId: data.sessionId
+      }));
+    } catch (error) {
+      console.error("Error handling WebRTC offer:", error);
+    }
+  }, []);
+  
+  // Handle incoming WebRTC answer
+  const handleWebRTCAnswer = useCallback(async (data: any) => {
+    try {
+      if (!peerConnectionRef.current) {
+        console.error("No peer connection to handle answer");
+        return;
+      }
+      
+      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } catch (error) {
+      console.error("Error handling WebRTC answer:", error);
+    }
+  }, []);
+  
+  // Handle incoming ICE candidate
+  const handleICECandidate = useCallback(async (data: any) => {
+    try {
+      if (!peerConnectionRef.current) {
+        console.error("No peer connection to handle ICE candidate");
+        return;
+      }
+      
+      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+    } catch (error) {
+      console.error("Error handling ICE candidate:", error);
+    }
+  }, []);
 
   // End session
   const endSession = useCallback(() => {
@@ -240,14 +339,15 @@ export default function StudyBuddyConnect() {
       localStreamRef.current = null;
     }
     
-    if (mediaConnRef.current) {
-      mediaConnRef.current.close();
-      mediaConnRef.current = null;
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
     }
     
-    if (peerRef.current) {
-      peerRef.current.destroy();
-      peerRef.current = null;
+    if (partySocketRef.current) {
+      partySocketRef.current.send(JSON.stringify({ type: "leave-queue" }));
+      partySocketRef.current.close();
+      partySocketRef.current = null;
     }
     
     if (timerRef.current) {
@@ -268,10 +368,14 @@ export default function StudyBuddyConnect() {
     delete (window as any).__partnerConn;
   }, []);
 
-  // Set up endSession ref
+  // Set up refs for callbacks
   useEffect(() => {
     endSessionRef.current = endSession;
-  }, [endSession]);
+    handleMatchFoundRef.current = handleMatchFound;
+    handleWebRTCOfferRef.current = handleWebRTCOffer;
+    handleWebRTCAnswerRef.current = handleWebRTCAnswer;
+    handleICECandidateRef.current = handleICECandidate;
+  }, [endSession, handleMatchFound, handleWebRTCOffer, handleWebRTCAnswer, handleICECandidate]);
 
   // Timer
   useEffect(() => {
