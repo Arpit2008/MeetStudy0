@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/preserve-manual-memoization */
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import PartySocket from "partysocket";
+import { joinRoom, Room, selfId } from "trystero";
 
 // Types
 interface SessionData {
@@ -21,8 +21,9 @@ const iceServers = [
   { urls: "stun:global.stun.twilio.com:3478" },
 ];
 
-// PartyKit server URL - uses your deployed PartyKit server
-const PARTYKIT_HOST = "studybuddy-connect.claude.partykit.dev";
+// Room and app ID for Trystero (decentralized P2P)
+const ROOM_ID = "studybuddy-room-v1";
+const APP_ID = "studybuddy-connect-v1";
 
 export default function StudyBuddyConnect() {
   // App states
@@ -53,24 +54,19 @@ export default function StudyBuddyConnect() {
   const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
   
   // Refs
-  const partySocketRef = useRef<PartySocket | null>(null);
+  const roomRef = useRef<Room | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
-  const localVideoRef = useRef<HTMLVideoElement>(null);
-  const remoteVideoRef = useRef<HTMLVideoElement>(null);
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const dataChannelRef = useRef<RTCDataChannel | null>(null);
-  const chatMessagesRef = useRef<HTMLDivElement>(null);
+  const botTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chatMessages, setChatMessages] = useState<{ sender: string; text: string }[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [isBotSession, setIsBotSession] = useState(false);
 
   // Refs for callbacks that need to be accessed before declaration
   const endSessionRef = useRef<() => void>(() => {});
-  const handleMatchFoundRef = useRef<any>(null);
-  const handleWebRTCOfferRef = useRef<any>(null);
-  const handleWebRTCAnswerRef = useRef<any>(null);
-  const handleICECandidateRef = useRef<any>(null);
 
   // Toggle dark mode
   const toggleDarkMode = useCallback(() => {
@@ -117,222 +113,115 @@ export default function StudyBuddyConnect() {
     });
   }, []);
 
-  // Find partner using PartyKit + WebRTC
+  // Find partner using Trystero (P2P via BitTorrent/IPFS)
   const findPartner = useCallback(() => {
     setCurrentView("searching");
     setConnectionError(null);
     setIsConnecting(true);
-    setSearchStatus("Looking for study partners...");
+    setSearchStatus("Connecting to P2P network...");
     
-    console.log("🔌 Connecting to PartyKit server...");
+    console.log("🔌 Connecting via Trystero (decentralized P2P)...");
+    console.log("My selfId:", selfId);
     
     try {
-      // Connect to PartyKit server
-      const partySocket = new PartySocket({
-        host: PARTYKIT_HOST,
-        room: "studybuddy-room",
-      });
-      partySocketRef.current = partySocket;
+      // Join Trystero room - this uses decentralized signaling
+      const room = joinRoom({ appId: APP_ID }, ROOM_ID);
+      roomRef.current = room;
       
-      // Listen for messages from server
-      partySocket.addEventListener("message", async (event) => {
-        const data = JSON.parse(event.data);
-        console.log("📨 Received message:", data.type);
+      console.log("📡 Joined room");
+      setSearchStatus("Searching for study partners...");
+      
+      // Create action for chat
+      const [sendChat, getChat] = room.makeAction("chat");
+      
+      // Handle incoming chat messages
+      getChat((data: any, peerId: string) => {
+        console.log("💬 Chat from peer:", data);
+        setChatMessages(prev => [...prev, { sender: data.sender, text: data.text }]);
+      });
+      
+      // Listen for peer join events
+      room.onPeerJoin((peerId: string) => {
+        console.log("👋 Peer joined:", peerId);
         
-        switch (data.type) {
-          case "waiting":
-            setSearchStatus(`Waiting in queue... (Position: ${data.position})`);
-            break;
-            
-          case "match-found":
-            console.log("🎉 Match found!", data);
-            setSearchStatus("Partner found! Connecting...");
-            if (handleMatchFoundRef.current) {
-              await handleMatchFoundRef.current(data);
-            }
-            break;
-            
-          case "webrtc-offer":
-            console.log("📨 Received WebRTC offer from", data.from);
-            if (handleWebRTCOfferRef.current) {
-              await handleWebRTCOfferRef.current(data);
-            }
-            break;
-            
-          case "webrtc-answer":
-            console.log("📨 Received WebRTC answer from", data.from);
-            if (handleWebRTCAnswerRef.current) {
-              await handleWebRTCAnswerRef.current(data);
-            }
-            break;
-            
-          case "ice-candidate":
-            console.log("📨 Received ICE candidate from", data.from);
-            if (handleICECandidateRef.current) {
-              await handleICECandidateRef.current(data);
-            }
-            break;
-            
-          case "session-ended":
-            console.log("Session ended:", data.reason);
-            endSessionRef.current();
-            break;
+        // Clear bot timeout since we found a peer
+        if (botTimeoutRef.current) {
+          clearTimeout(botTimeoutRef.current);
+          botTimeoutRef.current = null;
+        }
+        
+        setSearchStatus("Partner found! Connecting...");
+        
+        // Add stream to the new peer
+        if (localStreamRef.current) {
+          room.addStream(localStreamRef.current, peerId);
+          console.log("📤 Added stream to peer:", peerId);
         }
       });
       
-      // Send join-queue message
-      partySocket.send(JSON.stringify({ type: "join-queue" }));
+      // Listen for incoming streams
+      room.onPeerStream((stream: MediaStream, peerId: string) => {
+        console.log("📹 Received stream from peer:", peerId);
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = stream;
+        }
+        setIsPeerConnected(true);
+        setCurrentView("session");
+        setIsConnected(true);
+        setIsConnecting(false);
+        setTimeRemaining(30 * 60);
+      });
       
+      // Set a timeout to start bot session if no peers found
+      botTimeoutRef.current = setTimeout(() => {
+        console.log("⏰ No peers found after 10 seconds, starting bot session");
+        setSearchStatus("No peers found. Starting practice session...");
+        
+        // Clean up Trystero connection
+        if (roomRef.current) {
+          roomRef.current.leave();
+          roomRef.current = null;
+        }
+        
+        createBotSession();
+      }, 10000);
+      
+      // Try to get local media and add stream to room
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then((stream) => {
+          localStreamRef.current = stream;
+          setHasLocalStream(true);
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          
+          // Add stream to room (automatically shares with peers)
+          room.addStream(stream);
+          console.log("📤 Added local stream to room");
+        })
+        .catch(err => {
+          console.error("Error getting media devices:", err);
+          setConnectionError("Could not access camera/microphone. Please check permissions.");
+        });
+        
     } catch (error) {
-      console.error("Error connecting to PartyKit:", error);
+      console.error("Error connecting via Trystero:", error);
       setConnectionError("Could not connect. Please try again.");
       setIsConnecting(false);
       setCurrentView("landing");
     }
-  }, []);
-
-  // Handle match found - create WebRTC connection
-  const handleMatchFound = useCallback(async (data: any) => {
-    if (data.isBotSession) {
-      // Bot session - use local stream for both
-      createBotSession();
-      return;
-    }
-    
-    setCurrentView("session");
-    setSessionData({
-      sessionId: data.sessionId,
-      partnerId: data.partner.id
-    });
-    setIsConnecting(false);
-    setIsConnected(true);
-    
-    // Get local media stream
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localStreamRef.current = stream;
-      setHasLocalStream(true);
-      
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-      
-      // Create RTCPeerConnection
-      const pc = new RTCPeerConnection({ iceServers });
-      peerConnectionRef.current = pc;
-      
-      // Add local stream tracks to connection
-      stream.getTracks().forEach(track => {
-        pc.addTrack(track, stream);
-      });
-      
-      // Handle incoming stream
-      pc.ontrack = (event) => {
-        console.log("📹 Received remote stream", event.streams[0]);
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-        setIsPeerConnected(true);
-      };
-      
-      // Handle ICE candidates
-      pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          partySocketRef.current?.send(JSON.stringify({
-            type: "ice-candidate",
-            targetId: data.partner.id,
-            candidate: event.candidate,
-            sessionId: data.sessionId
-          }));
-        }
-      };
-      
-      // Handle connection state changes
-      pc.onconnectionstatechange = () => {
-        console.log("Connection state:", pc.connectionState);
-        if (pc.connectionState === "connected") {
-          setIsPeerConnected(true);
-        } else if (pc.connectionState === "disconnected" || pc.connectionState === "failed") {
-          console.log("Peer connection lost");
-        }
-      };
-      
-      // If initiator, create and send offer
-      if (data.isInitiator) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        
-        partySocketRef.current?.send(JSON.stringify({
-          type: "webrtc-offer",
-          targetId: data.partner.id,
-          offer: pc.localDescription,
-          sessionId: data.sessionId
-        }));
-      }
-      
-      // Start timer
-      setTimeRemaining(30 * 60);
-      
-    } catch (error) {
-      console.error("Error getting media devices:", error);
-      setConnectionError("Could not access camera/microphone. Please check permissions.");
-    }
   }, [createBotSession]);
-
-  // Handle incoming WebRTC offer
-  const handleWebRTCOffer = useCallback(async (data: any) => {
-    try {
-      if (!peerConnectionRef.current) {
-        console.error("No peer connection to handle offer");
-        return;
-      }
-      
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await peerConnectionRef.current.createAnswer();
-      await peerConnectionRef.current.setLocalDescription(answer);
-      
-      partySocketRef.current?.send(JSON.stringify({
-        type: "webrtc-answer",
-        targetId: data.from,
-        answer: peerConnectionRef.current.localDescription,
-        sessionId: data.sessionId
-      }));
-    } catch (error) {
-      console.error("Error handling WebRTC offer:", error);
-    }
-  }, []);
-  
-  // Handle incoming WebRTC answer
-  const handleWebRTCAnswer = useCallback(async (data: any) => {
-    try {
-      if (!peerConnectionRef.current) {
-        console.error("No peer connection to handle answer");
-        return;
-      }
-      
-      await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-    } catch (error) {
-      console.error("Error handling WebRTC answer:", error);
-    }
-  }, []);
-  
-  // Handle incoming ICE candidate
-  const handleICECandidate = useCallback(async (data: any) => {
-    try {
-      if (!peerConnectionRef.current) {
-        console.error("No peer connection to handle ICE candidate");
-        return;
-      }
-      
-      await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
-    } catch (error) {
-      console.error("Error handling ICE candidate:", error);
-    }
-  }, []);
 
   // End session
   const endSession = useCallback(() => {
     console.log("Ending session");
+    
+    // Clear bot timeout
+    if (botTimeoutRef.current) {
+      clearTimeout(botTimeoutRef.current);
+      botTimeoutRef.current = null;
+    }
     
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -344,10 +233,9 @@ export default function StudyBuddyConnect() {
       peerConnectionRef.current = null;
     }
     
-    if (partySocketRef.current) {
-      partySocketRef.current.send(JSON.stringify({ type: "leave-queue" }));
-      partySocketRef.current.close();
-      partySocketRef.current = null;
+    if (roomRef.current) {
+      roomRef.current.leave();
+      roomRef.current = null;
     }
     
     if (timerRef.current) {
@@ -364,18 +252,12 @@ export default function StudyBuddyConnect() {
     setChatMessages([]);
     setIsBotSession(false);
     setIsConnected(false);
-    
-    delete (window as any).__partnerConn;
   }, []);
 
   // Set up refs for callbacks
   useEffect(() => {
     endSessionRef.current = endSession;
-    handleMatchFoundRef.current = handleMatchFound;
-    handleWebRTCOfferRef.current = handleWebRTCOffer;
-    handleWebRTCAnswerRef.current = handleWebRTCAnswer;
-    handleICECandidateRef.current = handleICECandidate;
-  }, [endSession, handleMatchFound, handleWebRTCOffer, handleWebRTCAnswer, handleICECandidate]);
+  }, [endSession]);
 
   // Timer
   useEffect(() => {
@@ -426,9 +308,9 @@ export default function StudyBuddyConnect() {
 
   // Send chat message
   const sendChatMessage = useCallback(() => {
-    const conn = (window as any).__partnerConn;
-    if (chatInput.trim() && conn) {
-      conn.send({ type: 'chat', text: chatInput });
+    if (chatInput.trim() && roomRef.current) {
+      const [sendChat] = roomRef.current.makeAction("chat");
+      sendChat({ sender: "You", text: chatInput });
       setChatMessages(prev => [...prev, { sender: "You", text: chatInput }]);
       setChatInput("");
     }
@@ -501,22 +383,22 @@ export default function StudyBuddyConnect() {
           {currentView === "searching" && (
             <div className="text-center py-20">
               <div className="mb-8">
-                <div className="inline-block text-8xl animate-bounce">🔍</div>
+                <div className="inline-block text-8xl animate-pulse">🔍</div>
               </div>
               <h2 className={`text-4xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
-                Finding Your Study Partner...
+                {searchStatus}
               </h2>
               <p className={`text-xl mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                {searchStatus}
+                Using decentralized P2P network for connection
               </p>
-              <div className="flex justify-center gap-2 mb-8">
-                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse"></div>
-                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse delay-100"></div>
-                <div className="w-4 h-4 bg-indigo-500 rounded-full animate-pulse delay-200"></div>
+              <div className="flex justify-center items-center gap-2 mb-8">
+                <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce"></div>
+                <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                <div className="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
               </div>
               <button
                 onClick={endSession}
-                className="px-8 py-3 bg-gray-500 text-white rounded-full hover:bg-gray-600 transition-colors"
+                className="px-8 py-3 bg-gray-200 text-gray-700 rounded-full hover:bg-gray-300 transition-colors"
               >
                 Cancel
               </button>
@@ -525,108 +407,144 @@ export default function StudyBuddyConnect() {
 
           {/* Session View */}
           {currentView === "session" && (
-            <div className="max-w-6xl mx-auto">
-              {/* Timer */}
-              <div className="text-center mb-4">
-                <span className={`text-2xl font-bold ${isPaused ? 'text-yellow-500' : isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
-                  ⏱️ {formatTime(timeRemaining)}
-                </span>
-                {isPaused && <span className="ml-2 text-yellow-500">(Paused)</span>}
+            <div className="space-y-4">
+              {/* Session Header */}
+              <div className={`flex justify-between items-center p-4 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+                <div className="flex items-center gap-4">
+                  <span className={`text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                    {isBotSession ? "🤖 Practice Session" : "🎓 Study Session"}
+                  </span>
+                  <span className={`px-3 py-1 rounded-full text-sm ${isPeerConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                    {isPeerConnected ? "Connected" : "Connecting..."}
+                  </span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className={`text-xl font-mono ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                    ⏱️ {formatTime(timeRemaining)}
+                  </span>
+                  <button
+                    onClick={endSession}
+                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                  >
+                    End Session
+                  </button>
+                </div>
               </div>
 
               {/* Video Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Remote Video */}
+                <div className={`relative rounded-xl overflow-hidden shadow-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-gray-900'}`}>
+                  {isPeerConnected ? (
+                    <video
+                      ref={remoteVideoRef}
+                      autoPlay
+                      playsInline
+                      className="w-full aspect-video object-cover"
+                    />
+                  ) : (
+                    <div className="w-full aspect-video flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="text-6xl mb-4 animate-pulse">👤</div>
+                        <p className={`text-lg ${isDarkMode ? 'text-slate-400' : 'text-gray-400'}`}>
+                          {isBotSession ? "Your practice session" : "Waiting for partner..."}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/50 text-white rounded-lg text-sm">
+                    {isBotSession ? "You (Practice)" : "Partner"}
+                  </div>
+                </div>
+
                 {/* Local Video */}
-                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black aspect-video">
+                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-gray-900">
                   <video
                     ref={localVideoRef}
                     autoPlay
+                    playsInline
                     muted
-                    playsInline
-                    className="w-full h-full object-cover"
+                    className="w-full aspect-video object-cover"
                   />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                    You {isCameraMuted && '📷'}
+                  <div className="absolute bottom-4 left-4 px-3 py-1 bg-black/50 text-white rounded-lg text-sm">
+                    You
                   </div>
-                </div>
-                
-                {/* Remote Video */}
-                <div className="relative rounded-xl overflow-hidden shadow-2xl bg-black aspect-video">
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute bottom-2 left-2 bg-black/50 text-white px-2 py-1 rounded text-sm">
-                    Partner {isBotSession && '🤖'}
-                  </div>
-                  {!isPeerConnected && !isBotSession && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                      <p className="text-white">Connecting...</p>
+                  {isCameraMuted && (
+                    <div className="absolute top-4 right-4 p-2 bg-red-500 rounded-full">
+                      <span className="text-white">📷</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {/* Controls */}
-              <div className="flex justify-center gap-4">
-                <button
-                  onClick={toggleCamera}
-                  className={`p-4 rounded-full ${isCameraMuted ? 'bg-red-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
-                >
-                  {isCameraMuted ? '📷' : '📹'}
-                </button>
+              <div className={`flex justify-center items-center gap-4 p-4 rounded-lg ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
                 <button
                   onClick={toggleMic}
-                  className={`p-4 rounded-full ${isMicMuted ? 'bg-red-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
+                  className={`p-4 rounded-full transition-colors ${isMicMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  title={isMicMuted ? "Unmute" : "Mute"}
                 >
-                  {isMicMuted ? '🔇' : '🎤'}
+                  {isMicMuted ? "🔇" : "🎤"}
+                </button>
+                <button
+                  onClick={toggleCamera}
+                  className={`p-4 rounded-full transition-colors ${isCameraMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  title={isCameraMuted ? "Turn on camera" : "Turn off camera"}
+                >
+                  {isCameraMuted ? "📷" : "📹"}
                 </button>
                 <button
                   onClick={togglePause}
-                  className={`p-4 rounded-full ${isPaused ? 'bg-yellow-500' : 'bg-gray-600'} text-white hover:scale-110 transition-transform`}
+                  className={`p-4 rounded-full transition-colors ${isPaused ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-gray-200 hover:bg-gray-300'} ${isDarkMode ? 'text-white' : 'text-gray-800'}`}
+                  title={isPaused ? "Resume" : "Pause"}
                 >
-                  {isPaused ? '▶️' : '⏸️'}
+                  {isPaused ? "▶️" : "⏸️"}
                 </button>
                 <button
                   onClick={endSession}
-                  className="p-4 rounded-full bg-red-500 text-white hover:scale-110 transition-transform"
+                  className="p-4 rounded-full bg-red-500 hover:bg-red-600 text-white transition-colors"
+                  title="End session"
                 >
                   📞
                 </button>
               </div>
 
               {/* Chat */}
-              <div className="mt-4 max-w-md mx-auto">
-                <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-lg`}>
-                  <h3 className={`font-bold mb-2 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>Chat</h3>
-                  <div 
-                    ref={chatMessagesRef}
-                    className="h-32 overflow-y-auto mb-2 space-y-1"
-                  >
-                    {chatMessages.map((msg, i) => (
-                      <div key={i} className={`text-sm ${msg.sender === 'You' ? 'text-indigo-500' : isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                        <span className="font-bold">{msg.sender}:</span> {msg.text}
+              <div className={`rounded-xl p-4 ${isDarkMode ? 'bg-slate-800' : 'bg-white/80'} backdrop-blur shadow-lg`}>
+                <h3 className={`text-lg font-semibold mb-3 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                  💬 Chat
+                </h3>
+                <div className={`h-48 overflow-y-auto mb-3 p-3 rounded-lg ${isDarkMode ? 'bg-slate-700' : 'bg-gray-100'}`}>
+                  {chatMessages.length === 0 ? (
+                    <p className={`text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'}`}>
+                      No messages yet. Start the conversation!
+                    </p>
+                  ) : (
+                    chatMessages.map((msg, idx) => (
+                      <div key={idx} className={`mb-2 ${msg.sender === "You" ? 'text-right' : 'text-left'}`}>
+                        <span className={`inline-block px-3 py-1 rounded-lg ${msg.sender === "You" ? 'bg-indigo-500 text-white' : isDarkMode ? 'bg-slate-600 text-white' : 'bg-gray-200 text-gray-800'}`}>
+                          <span className="text-xs opacity-70 block">{msg.sender}</span>
+                          {msg.text}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={chatInput}
-                      onChange={(e) => setChatInput(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                      placeholder="Type a message..."
-                      className={`flex-1 px-3 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 text-white border-slate-600' : 'bg-gray-50 text-gray-800 border-gray-300'}`}
-                    />
-                    <button
-                      onClick={sendChatMessage}
-                      className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600"
-                    >
-                      Send
-                    </button>
-                  </div>
+                    ))
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    onKeyPress={(e) => e.key === "Enter" && sendChatMessage()}
+                    placeholder="Type a message..."
+                    className={`flex-1 px-4 py-2 rounded-lg border ${isDarkMode ? 'bg-slate-700 border-slate-600 text-white' : 'bg-white border-gray-300 text-gray-800'} focus:outline-none focus:ring-2 focus:ring-indigo-500`}
+                  />
+                  <button
+                    onClick={sendChatMessage}
+                    className="px-6 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                  >
+                    Send
+                  </button>
                 </div>
               </div>
             </div>
@@ -635,20 +553,34 @@ export default function StudyBuddyConnect() {
           {/* Completion Modal */}
           {showCompletionModal && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-              <div className={`p-8 rounded-2xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-2xl text-center`}>
+              <div className={`p-8 rounded-xl ${isDarkMode ? 'bg-slate-800' : 'bg-white'} shadow-2xl text-center`}>
                 <div className="text-6xl mb-4">🎉</div>
-                <h2 className={`text-2xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-gray-800'}`}>
+                <h2 className={`text-3xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                   Session Complete!
                 </h2>
-                <p className={`mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  Great job! You completed your study session.
+                <p className={`text-lg mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
+                  Great study session! Would you like to find another partner?
                 </p>
-                <button
-                  onClick={() => setShowCompletionModal(false)}
-                  className="px-8 py-3 bg-indigo-500 text-white rounded-full hover:bg-indigo-600"
-                >
-                  Find Another Partner
-                </button>
+                <div className="flex gap-4 justify-center">
+                  <button
+                    onClick={() => {
+                      setShowCompletionModal(false);
+                      findPartner();
+                    }}
+                    className="px-6 py-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                  >
+                    Find New Partner
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowCompletionModal(false);
+                      setCurrentView("landing");
+                    }}
+                    className={`px-6 py-3 rounded-lg transition-colors ${isDarkMode ? 'bg-slate-700 text-white hover:bg-slate-600' : 'bg-gray-200 text-gray-800 hover:bg-gray-300'}`}
+                  >
+                    Go to Home
+                  </button>
+                </div>
               </div>
             </div>
           )}
