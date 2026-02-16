@@ -46,6 +46,7 @@
 - [x] **Fix**: Fixed "Could not connect to server" error - completely rewrote socket connection logic for more reliability
 - [x] **Fix**: Simplified client (page.tsx) with more robust socket initialization and explicit wait for connection
 - [x] **Fix**: Simplified server.js with cleaner matching logic
+- [x] **Fix**: Improved socket connection with explicit localhost URL and connection status indicator
 
 ## Current Structure
 
@@ -68,6 +69,8 @@ bun run dev  # Starts both Next.js and Socket.io server on port 3000
    - No options to select
    - Always uses 30-minute video sessions
    - Glassmorphism design with gradient text
+   - Connection status indicator (connecting/connected/not connected)
+   - Auto-connect on page load
 
 2. **Matching System** - Queue-based matching with:
    - Periodic match checking every 2 seconds
