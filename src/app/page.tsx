@@ -204,7 +204,7 @@ export default function StudyBuddyConnect() {
       console.log("🎥 Setting local video srcObject");
       localVideoRef.current.srcObject = localStreamForVideo;
     }
-  }, [localStreamForVideo]);
+  }, [localStreamForVideo, currentView]);
 
   // Handle remote stream → remote video
   useEffect(() => {
@@ -212,7 +212,7 @@ export default function StudyBuddyConnect() {
       console.log("🎥 Setting remote video srcObject");
       remoteVideoRef.current.srcObject = remoteStreamForVideo;
     }
-  }, [remoteStreamForVideo]);
+  }, [remoteStreamForVideo, currentView]);
 
   // Timer
   useEffect(() => {
