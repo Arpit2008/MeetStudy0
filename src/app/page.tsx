@@ -56,7 +56,7 @@ const loadTrystero = async () => {
   }
 };
 
-export default function MeetStudyConnect() {
+export default function DuoStudyConnect() {
   // App states
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -337,8 +337,8 @@ export default function MeetStudyConnect() {
     const url = window.location.href;
     if (navigator.share) {
       navigator.share({
-        title: "MeetStudy Connect",
-        text: "Join me for a focused study session with MeetStudy Connect!",
+        title: "DuoStudy Connect",
+        text: "Join me for a focused study session with DuoStudy Connect!",
         url: url,
       });
     } else {
@@ -565,8 +565,8 @@ export default function MeetStudyConnect() {
         <header className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md">
           <h1 className={`text-lg sm:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'} flex items-center gap-2`}>
             <span className="text-2xl sm:text-3xl animate-bounce-subtle">🎓</span>
-            <span className="hidden sm:inline">MeetStudy Connect</span>
-            <span className="sm:hidden">MeetStudy</span>
+            <span className="hidden sm:inline">DuoStudy Connect</span>
+            <span className="sm:hidden">DuoStudy</span>
           </h1>
           <div className="flex items-center gap-2 sm:gap-3">
             <button

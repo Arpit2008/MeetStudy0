@@ -8,10 +8,10 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "MeetStudy Connect - Find Your Perfect Study Partner",
+  title: "DuoStudy Connect - Find Your Perfect Study Partner",
   description: "A peer-to-peer study matching platform. Connect instantly with study partners for video calls or text chat. No login required, 100% private.",
   keywords: ["study partner", "online study", "peer learning", "video call", "study session"],
-  authors: [{ name: "MeetStudy" }],
+  authors: [{ name: "DuoStudy" }],
   themeColor: "#0ea5e9",
 };
 
