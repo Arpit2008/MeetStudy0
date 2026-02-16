@@ -6,17 +6,19 @@
 
 ## Recently Completed
 
-- [x] Switched from Socket.io to Trystero for P2P WebRTC connections
+- [x] Switched from PartyKit to Trystero for P2P WebRTC connections
 - [x] Trystero uses BitTorrent/IPFS/Nostr for signaling - no server needed
 - [x] Works in production because it doesn't require a persistent server
-- [x] Bot fallback still works when no peers are found (after 15 seconds)
+- [x] Bot fallback after 10 seconds if no peers are found
 - [x] Video/audio streaming via Trystero's addStream/onPeerStream APIs
 - [x] Chat via Trystero's makeAction API
+- [x] Removed PartyKit dependency (required server deployment)
 
 ## Architecture Change
 
-**Before**: Socket.io server (required persistent server)
-- Failed in production because Kiloapps only runs Next.js, not custom Node.js server
+**Before**: PartyKit server (needed deployment)
+- Failed because PartyKit server wasn't deployed
+- WebSocket connection errors to non-existent server
 
 **After**: Trystero (P2P, serverless)
 - Uses decentralized signaling (BitTorrent trackers)
