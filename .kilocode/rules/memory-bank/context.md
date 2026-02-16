@@ -1,4 +1,4 @@
-# Active Context: StudyBuddy Connect
+# Active Context: MeetStudy Connect
 
 ## Current State
 
@@ -24,6 +24,7 @@
 - [x] Improved Trystero trackers (using IPFS trackers instead of Nostr relays)
 - [x] Added self-ID filtering to avoid connecting to self
 - [x] Fixed client-side exception - Trystero SSR error (dynamic import on client only)
+- [x] Rename: StudyBuddy Connect -> MeetStudy Connect
 
 ## Architecture Change
 
