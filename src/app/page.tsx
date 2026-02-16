@@ -408,9 +408,10 @@ export default function StudyBuddyConnect() {
     
     // Wait for socket to be ready before joining queue
     waitForSocket(socket, () => {
-      if (socket.id) {
-        socket.emit("join-queue", { id: socket.id });
-      }
+      // Use the socket id that was assigned on connection
+      const socketId = socket.id || `temp-${Date.now()}`;
+      console.log("🔍 Joining queue with socket ID:", socketId);
+      socket.emit("join-queue", { id: socketId });
     });
   }, [initSocket, waitForSocket]);
 

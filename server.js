@@ -33,7 +33,7 @@ app.prepare().then(() => {
 
     // User joins waiting queue
     socket.on('join-queue', (userData) => {
-      console.log('📝 Join queue request from:', socket.id);
+      console.log('📝 Join queue request from:', socket.id, 'with data:', userData);
       
       // Prevent duplicate entries
       const existingIndex = waitingUsers.findIndex(w => w.id === socket.id);
@@ -55,6 +55,15 @@ app.prepare().then(() => {
       
       // Try to match immediately
       attemptMatch();
+
+      // Also set a timeout to create bot session if no match in 5 seconds
+      setTimeout(() => {
+        // Check if user is still waiting
+        if (waitingUsers.find(w => w.id === socket.id)) {
+          console.log(`⏰ Timeout reached for ${socket.id}, creating bot session...`);
+          createBotSession(socket.id);
+        }
+      }, 5000);
     });
 
     // WebRTC signaling - offer
@@ -193,8 +202,12 @@ app.prepare().then(() => {
 
   // Create bot session for single user
   function createBotSession(userId) {
+    console.log(`🤖 createBotSession called for userId: ${userId}`);
     const realUser = waitingUsers.find(u => u.id === userId);
-    if (!realUser) return;
+    if (!realUser) {
+      console.log(`❌ User ${userId} not found in waitingUsers`);
+      return;
+    }
     
     const idx = waitingUsers.indexOf(realUser);
     if (idx > -1) waitingUsers.splice(idx, 1);
@@ -213,6 +226,7 @@ app.prepare().then(() => {
     };
     activeSessions.set(sessionId, session);
     
+    console.log(`📤 Emitting match-found to ${realUser.id}...`);
     io.to(realUser.id).emit('match-found', {
       sessionId,
       partner: bot,
@@ -220,7 +234,7 @@ app.prepare().then(() => {
       isBotSession: true
     });
     
-    console.log(`🤖 Bot session created for ${realUser.id}`);
+    console.log(`✅ Bot session created: ${sessionId}`);
   }
 
   // Periodically check for matches
@@ -238,7 +252,10 @@ app.prepare().then(() => {
     // Bot fallback - if single user for 5 seconds
     if (waitingUsers.length === 1) {
       const user = waitingUsers[0];
-      if (Date.now() - user.joinedAt > 5000) {
+      const timeInQueue = Date.now() - user.joinedAt;
+      console.log(`⏳ User ${user.id} in queue for ${timeInQueue}ms`);
+      if (timeInQueue > 5000) {
+        console.log(`🤖 Creating bot session for user ${user.id}...`);
         createBotSession(user.id);
       }
     }
