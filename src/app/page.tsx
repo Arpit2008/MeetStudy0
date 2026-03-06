@@ -569,6 +569,12 @@ export default function TalkStranger() {
             <span className="sm:hidden">TalkStranger</span>
           </h1>
           <div className="flex items-center gap-2 sm:gap-3">
+            {/* Navigation Links */}
+            <nav className="hidden sm:flex items-center gap-2 mr-2">
+              <a href="/about" className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-indigo-600 hover:bg-indigo-50'} transition-colors`}>About</a>
+              <a href="/privacy" className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-indigo-600 hover:bg-indigo-50'} transition-colors`}>Privacy</a>
+              <a href="/terms" className={`px-3 py-1.5 rounded-lg text-sm font-medium ${isDarkMode ? 'text-slate-300 hover:bg-slate-700' : 'text-indigo-600 hover:bg-indigo-50'} transition-colors`}>Terms</a>
+            </nav>
             <button
               onClick={shareLink}
               className={`p-2.5 sm:p-2 rounded-full ${isDarkMode ? 'bg-slate-700/80 text-white hover:bg-slate-600' : 'bg-white/80 text-indigo-600 hover:bg-indigo-50'} shadow-lg hover:scale-110 active:scale-95 transition-all duration-200 backdrop-blur`}
@@ -640,7 +646,32 @@ export default function TalkStranger() {
               </div>
               
               <div className="mb-6 sm:mb-8">
-                <span className="text-6xl sm:text-8xl inline-block animate-float">📚</span>
+                {/* Image: Girl and Boy Chatting by Phone */}
+                <div className="inline-block relative">
+                  <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg" className="animate-float">
+                    {/* Boy */}
+                    <circle cx="60" cy="50" r="30" fill="#60A5FA"/>
+                    <circle cx="50" cy="45" r="5" fill="#1F2937"/>
+                    <circle cx="70" cy="45" r="5" fill="#1F2937"/>
+                    <path d="M45 55 Q60 65 75 55" stroke="#1F2937" strokeWidth="2" fill="none"/>
+                    <rect x="40" y="80" width="40" height="50" rx="10" fill="#3B82F6"/>
+                    {/* Boy phone */}
+                    <rect x="55" y="70" width="12" height="20" rx="2" fill="#1F2937"/>
+                    {/* Girl */}
+                    <circle cx="140" cy="50" r="30" fill="#F472B6"/>
+                    <circle cx="130" cy="45" r="5" fill="#1F2937"/>
+                    <circle cx="150" cy="45" r="5" fill="#1F2937"/>
+                    <path d="M125 55 Q140 65 155 55" stroke="#1F2937" strokeWidth="2" fill="none"/>
+                    <rect x="120" y="80" width="40" height="50" rx="10" fill="#EC4899"/>
+                    {/* Girl phone */}
+                    <rect x="133" y="65" width="12" height="20" rx="2" fill="#1F2937"/>
+                    {/* Speech bubbles */}
+                    <ellipse cx="45" cy="30" rx="20" ry="15" fill="white" stroke="#60A5FA" strokeWidth="2"/>
+                    <ellipse cx="155" cy="30" rx="20" ry="15" fill="white" stroke="#F472B6" strokeWidth="2"/>
+                    <circle cx="50" cy="130" r="8" fill="#3B82F6"/>
+                    <circle cx="150" cy="130" r="8" fill="#EC4899"/>
+                  </svg>
+                </div>
               </div>
               <h2 className={`text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                 Find a Video Chat Partner
@@ -659,7 +690,7 @@ export default function TalkStranger() {
               )}
               
               {/* Timer Duration Selector - Mobile optimized */}
-              <div className="mb-8 px-4">
+              {/* <div className="mb-8 px-4">
                 <p className={`mb-3 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>Select chat duration:</p>
                 <div className="flex justify-center gap-2 sm:gap-3">
                   {[25, 45, 60].map((duration, idx) => (
@@ -677,7 +708,7 @@ export default function TalkStranger() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </div> */}
               
               <button
                 onClick={findPartner}
@@ -731,9 +762,9 @@ export default function TalkStranger() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto justify-between sm:justify-end">
-                  <span className={`text-lg sm:text-xl font-mono font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
+                  {/* <span className={`text-lg sm:text-xl font-mono font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
                     ⏱️ {formatTime(timeRemaining)}
-                  </span>
+                  </span> */}
                   <button
                     onClick={endSession}
                     className="px-4 py-2 sm:px-4 sm:py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 active:scale-95 transition-all text-sm sm:text-base"
