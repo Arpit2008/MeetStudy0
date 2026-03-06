@@ -102,7 +102,7 @@ export default function TalkStranger() {
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [searchStatus, setSearchStatus] = useState("Looking for study partners...");
+  const [searchStatus, setSearchStatus] = useState("Looking for a video chat partner...");
   
   // Refs
   const roomRef = useRef<any>(null);
@@ -319,8 +319,8 @@ export default function TalkStranger() {
     setIsPlayingMusic(prev => !prev);
   }, [isPlayingMusic]);
 
-  // Handle study mode change
-  const handleStudyModeChange = useCallback((mode: "normal" | "silent") => {
+  // Handle chat mode change
+  const handleChatModeChange = useCallback((mode: "normal" | "silent") => {
     setStudyMode(mode);
     if (mode === "silent" && localStreamRef.current) {
       // Auto-mute mic in silent mode
@@ -343,7 +343,7 @@ export default function TalkStranger() {
       });
     } else {
       navigator.clipboard.writeText(url).then(() => {
-        alert("Link copied to clipboard! Share with friends to study together.");
+        alert("Link copied to clipboard! Share with friends to chat together.");
       });
     }
   }, []);
@@ -393,7 +393,7 @@ export default function TalkStranger() {
       roomRef.current = room;
       
       console.log("📡 Joined room with IPFS trackers");
-      setSearchStatus("Searching for study partners...");
+      setSearchStatus("Searching for a video chat partner...");
       
       // Create action for chat
       const [sendChat, getChat] = room.makeAction("chat");
@@ -755,7 +755,7 @@ export default function TalkStranger() {
               <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-slate-800/90' : 'bg-white/80'} backdrop-blur shadow-lg`}>
                 <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
                   <span className={`text-base sm:text-lg font-semibold ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
-                    {isBotSession ? "🤖 Practice Session" : "🎓 Study Session"}
+                    {isBotSession ? "🤖 Demo Session" : "💬 Chatting Session"}
                   </span>
                   <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm ${isPeerConnected ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                     {isPeerConnected ? "Connected" : "Connecting..."}
@@ -821,9 +821,9 @@ export default function TalkStranger() {
 
               {/* Controls - Mobile optimized with larger touch targets */}
               <div className={`flex flex-wrap justify-center items-center gap-2 sm:gap-4 p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-slate-800/90' : 'bg-white/80'} backdrop-blur shadow-lg`}>
-                {/* Study Mode Toggle */}
+                {/* Chat Mode Toggle */}
                 <button
-                  onClick={() => handleStudyModeChange(studyMode === "normal" ? "silent" : "normal")}
+                  onClick={() => handleChatModeChange(studyMode === "normal" ? "silent" : "normal")}
                   className={`px-4 py-3 sm:px-4 sm:py-2 rounded-full text-sm font-semibold transition-all duration-200 active:scale-95 ${
                     studyMode === "silent" 
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30' 
@@ -884,7 +884,7 @@ export default function TalkStranger() {
               {showIcebreaker && !isBotSession && (
                 <div className={`text-center p-3 sm:p-4 rounded-lg ${isDarkMode ? 'bg-indigo-900/50' : 'bg-indigo-50'} animate-pulse backdrop-blur`}>
                   <p className={`text-sm sm:text-lg font-semibold ${isDarkMode ? 'text-indigo-200' : 'text-indigo-800'}`}>
-                    👋 Say hi to your study partner!
+                    👋 Say hi to your chat partner!
                   </p>
                   <button
                     onClick={() => setShowIcebreaker(false)}
