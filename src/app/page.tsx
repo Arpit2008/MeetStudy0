@@ -26,8 +26,8 @@ const iceServers = [
 ];
 
 // Room and app ID for Trystero (decentralized P2P)
-const ROOM_ID = "studybuddy-room-v1";
-const APP_ID = "studybuddy-connect-v1";
+const ROOM_ID = "talkstranger-room-v1";
+const APP_ID = "talkstranger-connect-v1";
 
 // Trystero config - using only IPFS trackers (no Nostr relays)
 // IPFS trackers are more reliable and don't have rate limiting issues
@@ -56,7 +56,7 @@ const loadTrystero = async () => {
   }
 };
 
-export default function DuoStudyConnect() {
+export default function TalkStranger() {
   // App states
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -71,7 +71,7 @@ export default function DuoStudyConnect() {
   // Initialize dark mode and session count from localStorage after mount
   useEffect(() => {
     setMounted(true);
-    const savedTheme = localStorage.getItem("studybuddy-theme");
+    const savedTheme = localStorage.getItem("talkstranger-theme");
     if (savedTheme === "dark") {
       document.documentElement.classList.add("dark");
       setIsDarkMode(true);
@@ -83,8 +83,8 @@ export default function DuoStudyConnect() {
     if (savedDate === today && savedCount) {
       setSessionCount(parseInt(savedCount, 10));
     } else {
-      localStorage.setItem("studybuddy-date", today);
-      localStorage.setItem("studybuddy-sessions", "0");
+      localStorage.setItem("talkstranger-date", today);
+      localStorage.setItem("talkstranger-sessions", "0");
     }
   }, []);
 /* eslint-enable react-hooks/set-state-in-effect */
@@ -129,10 +129,10 @@ export default function DuoStudyConnect() {
       const newValue = !prev;
       if (newValue) {
         document.documentElement.classList.add("dark");
-        localStorage.setItem("studybuddy-theme", "dark");
+        localStorage.setItem("talkstranger-theme", "dark");
       } else {
         document.documentElement.classList.remove("dark");
-        localStorage.setItem("studybuddy-theme", "light");
+        localStorage.setItem("talkstranger-theme", "light");
       }
       return newValue;
     });
@@ -337,8 +337,8 @@ export default function DuoStudyConnect() {
     const url = window.location.href;
     if (navigator.share) {
       navigator.share({
-        title: "DuoStudy Connect",
-        text: "Join me for a focused study session with DuoStudy Connect!",
+        title: "TalkStranger",
+        text: "Join me for a random video chat on TalkStranger!",
         url: url,
       });
     } else {
@@ -564,9 +564,9 @@ export default function DuoStudyConnect() {
         {/* Header - Mobile optimized */}
         <header className="p-3 sm:p-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md">
           <h1 className={`text-lg sm:text-2xl font-bold ${isDarkMode ? 'text-white' : 'text-indigo-900'} flex items-center gap-2`}>
-            <span className="text-2xl sm:text-3xl animate-bounce-subtle">🎓</span>
-            <span className="hidden sm:inline">DuoStudy Connect</span>
-            <span className="sm:hidden">DuoStudy</span>
+            <span className="text-2xl sm:text-3xl animate-bounce-subtle">💬</span>
+            <span className="hidden sm:inline">TalkStranger</span>
+            <span className="sm:hidden">TalkStranger</span>
           </h1>
           <div className="flex items-center gap-2 sm:gap-3">
             <button
@@ -643,10 +643,10 @@ export default function DuoStudyConnect() {
                 <span className="text-6xl sm:text-8xl inline-block animate-float">📚</span>
               </div>
               <h2 className={`text-3xl sm:text-5xl font-bold mb-3 sm:mb-4 ${isDarkMode ? 'text-white' : 'text-indigo-900'}`}>
-                Find Your Study Partner
+                Find a Video Chat Partner
               </h2>
               <p className={`text-base sm:text-xl mb-6 sm:mb-8 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'} px-4`}>
-                Connect via video with fellow students for focused study sessions
+                Connect via video with strangers for live chat sessions
               </p>
               
               {/* Session Counter */}
@@ -660,7 +660,7 @@ export default function DuoStudyConnect() {
               
               {/* Timer Duration Selector - Mobile optimized */}
               <div className="mb-8 px-4">
-                <p className={`mb-3 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>Select study duration:</p>
+                <p className={`mb-3 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>Select chat duration:</p>
                 <div className="flex justify-center gap-2 sm:gap-3">
                   {[25, 45, 60].map((duration, idx) => (
                     <button
@@ -668,7 +668,7 @@ export default function DuoStudyConnect() {
                       onClick={() => setSelectedDuration(duration)}
                       className={`px-5 py-3 sm:px-6 sm:py-3 rounded-full font-semibold text-base sm:text-lg transition-all duration-300 ${
                         selectedDuration === duration
-                          ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white scale-105 shadow-lg shadow-indigo-500/30'
+                          ? 'bg-gradient-to-r from-sky-500 to-cyan-500 text-white scale-105 shadow-lg shadow-sky-500/30'
                           : `${isDarkMode ? 'bg-slate-700/80 text-slate-300 hover:bg-slate-600' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow`
                       } active:scale-95`}
                       style={{ animationDelay: `${idx * 0.1}s` }}
@@ -681,9 +681,9 @@ export default function DuoStudyConnect() {
               
               <button
                 onClick={findPartner}
-                className="px-8 py-4 sm:px-12 sm:py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white text-lg sm:text-xl font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 animate-glow"
+                className="px-8 py-4 sm:px-12 sm:py-4 bg-gradient-to-r from-sky-500 via-cyan-500 to-teal-500 text-white text-lg sm:text-xl font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all duration-300 animate-glow"
               >
-                Find a Study Partner
+                Start Video Chat
               </button>
               <p className={`mt-4 text-xs sm:text-sm ${isDarkMode ? 'text-slate-400' : 'text-gray-500'} px-4`}>
                 🔒 100% Private • No Login Required • Video Sessions • P2P Connection
@@ -925,7 +925,7 @@ export default function DuoStudyConnect() {
                   Session Complete!
                 </h2>
                 <p className={`text-base sm:text-lg mb-5 sm:mb-6 ${isDarkMode ? 'text-slate-300' : 'text-gray-600'}`}>
-                  Great study session! Would you like to find another partner?
+                  Great chat session! Would you like to find another stranger?
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
                   <button
@@ -933,9 +933,9 @@ export default function DuoStudyConnect() {
                       setShowCompletionModal(false);
                       findPartner();
                     }}
-                    className="px-6 py-3 sm:px-6 sm:py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-xl hover:from-indigo-600 hover:to-purple-600 active:scale-95 transition-all font-semibold text-base"
+                    className="px-6 py-3 sm:px-6 sm:py-3 bg-gradient-to-r from-sky-500 to-cyan-500 text-white rounded-xl hover:from-sky-600 hover:to-cyan-600 active:scale-95 transition-all font-semibold text-base"
                   >
-                    Find New Partner
+                    Find New Stranger
                   </button>
                   <button
                     onClick={() => {
