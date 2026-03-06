@@ -6,12 +6,16 @@
 
 ## Recently Completed
 
+- [x] Changed "study partners" text to "video chat partner" throughout the app
+- [x] Changed emoji from 🎓 to 💬 and "Study Session" to "Chatting Session"
+- [x] Added navigation links (About, Privacy, Terms) to header
+- [x] Removed timer feature (duration selector + timer display)
+- [x] Replaced book emoji with SVG illustration of boy and girl chatting
 - [x] Renamed website to TalkStranger - random video chat platform
 - [x] Updated title to "Talk to Strangers – Free Random Video Chat | TalkStranger"
 - [x] Updated keywords: talk to strangers online, random video chat, free stranger chat
 - [x] Changed tagline to "Find a Video Chat Partner" / "Connect via video with strangers for live chat sessions"
 - [x] Changed button text to "Start Video Chat"
-- [x] Updated emoji from 🎓 to 💬
 - [x] Changed colors from indigo/purple to sky/cyan gradient
 - [x] Added admin details: Name: Arpit Maurya, Email: arpitmaurya55555@gmail.com
 - [x] Keep: 🔒 100% Private • No Login Required • Video Sessions • P2P Connection
@@ -32,6 +36,9 @@
 | File/Directory | Purpose | Status |
 |----------------|---------|--------|
 | `src/app/page.tsx` | Main app with Trystero P2P logic | ✅ Ready |
+| `src/app/about/page.tsx` | About Us page | ✅ Ready |
+| `src/app/privacy/page.tsx` | Privacy Policy page | ✅ Ready |
+| `src/app/terms/page.tsx` | Terms and Conditions page | ✅ Ready |
 | `src/app/globals.css` | Glassmorphism and animations | ✅ Ready |
 | `src/app/layout.tsx` | Root layout | ✅ Ready |
 
